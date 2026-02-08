@@ -1,8 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
-if (!API_URL) {
-  throw new Error("NEXT_PUBLIC_API_URL is not defined");
-}
+// client/src/lib/api.ts
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
@@ -12,6 +8,13 @@ export async function apiRequest(
   body?: any,
   token?: string
 ) {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+  // ✅ Runtime guard (NOT build-time)
+  if (!API_URL) {
+    throw new Error("API is not configured. Please try again later.");
+  }
+
   const headers: HeadersInit = {
     "Content-Type": "application/json",
   };
@@ -26,16 +29,13 @@ export async function apiRequest(
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  // 🔥 SAFELY READ RESPONSE
   const text = await res.text();
 
   let data: any;
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
-    throw new Error(
-      "Server returned non-JSON response. Please try again."
-    );
+    throw new Error("Server returned invalid response");
   }
 
   if (!res.ok) {
