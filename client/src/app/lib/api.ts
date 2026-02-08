@@ -1,23 +1,11 @@
-// client/src/lib/api.ts
-
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 if (!API_URL) {
-  throw new Error(
-    "NEXT_PUBLIC_API_URL is not defined. Please set it in Vercel environment variables."
-  );
+  throw new Error("NEXT_PUBLIC_API_URL is not defined");
 }
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
-interface ApiOptions {
-  token?: string;
-  headers?: Record<string, string>;
-}
-
-/* ============================
-   MAIN API REQUEST HELPER
-============================ */
 export async function apiRequest(
   endpoint: string,
   method: HttpMethod = "GET",
@@ -36,20 +24,22 @@ export async function apiRequest(
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
-    credentials: "include",
   });
 
-  let data: any;
-  const contentType = res.headers.get("content-type");
+  // 🔥 SAFELY READ RESPONSE
+  const text = await res.text();
 
-  if (contentType && contentType.includes("application/json")) {
-    data = await res.json();
-  } else {
-    data = { success: false, message: "Invalid server response" };
+  let data: any;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(
+      "Server returned non-JSON response. Please try again."
+    );
   }
 
   if (!res.ok) {
-    throw new Error(data?.message || "API request failed");
+    throw new Error(data?.message || "Request failed");
   }
 
   return data;

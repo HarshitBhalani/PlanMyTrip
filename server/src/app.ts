@@ -17,7 +17,10 @@ app.use(express.urlencoded({ extended: true }));
 /* ✅ CORS */
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "*",
+    origin: [
+      "http://localhost:3000",
+      "https://planmytrip-8hkz.onrender.com",
+    ],
     credentials: true,
   })
 );
