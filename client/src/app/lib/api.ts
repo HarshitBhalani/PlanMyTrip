@@ -1,27 +1,56 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL;
+// client/src/lib/api.ts
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+if (!API_URL) {
+  throw new Error(
+    "NEXT_PUBLIC_API_URL is not defined. Please set it in Vercel environment variables."
+  );
+}
+
+type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+
+interface ApiOptions {
+  token?: string;
+  headers?: Record<string, string>;
+}
+
+/* ============================
+   MAIN API REQUEST HELPER
+============================ */
 export async function apiRequest(
-  url: string,
-  method: string = "GET",
+  endpoint: string,
+  method: HttpMethod = "GET",
   body?: any,
   token?: string
 ) {
-  const response = await fetch(`${API_BASE}${url}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token && { Authorization: `Bearer ${token}` }),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  };
 
-  const contentType = response.headers.get("content-type");
-
-  // 🚨 Guard: backend must return JSON
-  if (!contentType || !contentType.includes("application/json")) {
-    const text = await response.text();
-    throw new Error("Server returned non-JSON response");
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
 
-  return response.json();
+  const res = await fetch(`${API_URL}${endpoint}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: "include",
+  });
+
+  let data: any;
+  const contentType = res.headers.get("content-type");
+
+  if (contentType && contentType.includes("application/json")) {
+    data = await res.json();
+  } else {
+    data = { success: false, message: "Invalid server response" };
+  }
+
+  if (!res.ok) {
+    throw new Error(data?.message || "API request failed");
+  }
+
+  return data;
 }

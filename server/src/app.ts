@@ -22,11 +22,19 @@ app.use(
   })
 );
 
+
 /* ✅ HEALTH CHECK */
 app.get("/api/health", (_req, res) => {
   res.status(200).json({
     success: true,
     message: "API is running",
+  });
+});
+
+app.get("/", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "PlanMyTrip API is running",
   });
 });
 
