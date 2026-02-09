@@ -1,11 +1,22 @@
 import { Request, Response } from "express";
 import User from "../models/User.model";
 import { hashPassword, comparePassword } from "../utils/hash";
-import { generateToken } from "../utils/jwt";
+import jwt from "jsonwebtoken";
 
-/* ============================
-   SIGNUP CONTROLLER
-============================ */
+/* =====================
+   HELPER: GENERATE JWT
+===================== */
+const generateToken = (userId: string) => {
+  return jwt.sign(
+    { userId },
+    process.env.JWT_SECRET as string,
+    { expiresIn: "7d" }
+  );
+};
+
+/* =====================
+   SIGNUP (CREATE USER)
+===================== */
 export const signup = async (req: Request, res: Response) => {
   try {
     const { fullName, email, password } = req.body;
@@ -31,16 +42,14 @@ export const signup = async (req: Request, res: Response) => {
       fullName,
       email,
       passwordHash,
+      createdAt: new Date(),
     });
 
-    // ✅ Generate JWT (JOSE – async)
-    const token = await generateToken({
-      userId: user._id.toString(),
-    });
+    const token = generateToken(user._id.toString());
 
     return res.status(201).json({
       success: true,
-      message: "User registered successfully",
+      message: "Account created successfully",
       token,
       user: {
         id: user._id,
@@ -57,9 +66,9 @@ export const signup = async (req: Request, res: Response) => {
   }
 };
 
-/* ============================
-   LOGIN CONTROLLER
-============================ */
+/* =====================
+   LOGIN (AUTH ONLY)
+===================== */
 export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
@@ -67,7 +76,7 @@ export const login = async (req: Request, res: Response) => {
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: "Email and password are required",
+        message: "Email and password required",
       });
     }
 
@@ -90,13 +99,11 @@ export const login = async (req: Request, res: Response) => {
     user.lastLogin = new Date();
     await user.save();
 
-    // ✅ Generate JWT (JOSE – async)
-    const token = await generateToken({
-      userId: user._id.toString(),
-    });
+    const token = generateToken(user._id.toString());
 
     return res.status(200).json({
       success: true,
+      message: "Login successful",
       token,
       user: {
         id: user._id,

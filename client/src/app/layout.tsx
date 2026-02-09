@@ -1,13 +1,11 @@
 import "./globals.css";
 import Navbar from "@/components/Navbar";
-import { Toaster } from "react-hot-toast";
+import { Sonner } from "../components/ui/sonner";
 
 export const metadata = {
   title: "AI Trip Planner",
   description: "Plan trips with AI",
 };
-
-<Toaster position="top-right" />
 
 export default function RootLayout({
   children,
@@ -18,9 +16,8 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <Navbar />
-        <main className="max-w-6xl mx-auto px-4 py-6">
-          {children}
-        </main>
+        {children}
+        <Sonner />
       </body>
     </html>
   );

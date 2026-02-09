@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { apiRequest } from "../../lib/api";
 import { useRouter } from "next/navigation";
-import toast from "react-hot-toast";
+import { apiRequest } from "../../lib/api";
 import { saveAuth } from "../../lib/auth";
+import { toast } from "sonner";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -12,68 +12,82 @@ export default function SignupPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  
-const signup = async () => {
-  setError("");
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  try {
-    const res = await apiRequest("/api/auth/signup", "POST", {
-      fullName,
-      email,
-      password,
-    });
+    try {
+      setLoading(true);
 
-    if (!res.success) throw new Error(res.message);
+      // 🔐 SIGNUP API — creates user + returns token
+      const res = await apiRequest("/api/auth/signup", "POST", {
+        fullName,
+        email,
+        password,
+      });
 
-    saveAuth(res.token, res.user);
+      // ✅ Save token + user
+      saveAuth(res.token, res.user);
 
-    toast.success("Account created successfully 🎉");
-    router.push("/");
-  } catch (err: any) {
-    setError(err.message);
-  }
-};
+      // ✅ Success toast
+      toast.success("Account created 🎉", {
+        description: "Welcome! Redirecting to create trip...",
+      });
+
+      // ✅ Redirect
+      router.push("/create-trip");
+    } catch (err: any) {
+      toast.error("Signup failed", {
+        description: err.message || "Something went wrong",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="max-w-sm mx-auto mt-20">
-      <h1 className="text-2xl font-bold mb-4">Create Account</h1>
+    <div className="max-w-md mx-auto mt-20 px-4">
+      <h1 className="text-2xl font-bold mb-6 text-center">
+        Create your account
+      </h1>
 
-      <input
-        placeholder="Full Name"
-        className="border p-2 w-full mb-2"
-        onChange={(e) => setFullName(e.target.value)}
-      />
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <input
+          type="text"
+          placeholder="Full Name"
+          className="w-full border rounded px-3 py-2"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          required
+        />
 
-      <input
-        placeholder="Email"
-        className="border p-2 w-full mb-2"
-        onChange={(e) => setEmail(e.target.value)}
-      />
+        <input
+          type="email"
+          placeholder="Email address"
+          className="w-full border rounded px-3 py-2"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
 
-      <input
-        type="password"
-        placeholder="Password"
-        className="border p-2 w-full mb-2"
-        onChange={(e) => setPassword(e.target.value)}
-      />
+        <input
+          type="password"
+          placeholder="Password"
+          className="w-full border rounded px-3 py-2"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
 
-      {error && <p className="text-red-600 text-sm">{error}</p>}
-
-      <button
-        onClick={signup}
-        className="bg-black text-white w-full py-2 rounded mt-4"
-      >
-        Sign Up
-      </button>
-
-      <p className="text-sm text-gray-600 mt-4 text-center">
-        Already have an account?{" "}
-        <a href="/auth/login" className="underline">
-          Login
-        </a>
-      </p>
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-black text-white py-2 rounded disabled:opacity-60"
+        >
+          {loading ? "Creating account..." : "Sign Up"}
+        </button>
+      </form>
     </div>
   );
 }

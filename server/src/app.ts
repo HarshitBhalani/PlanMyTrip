@@ -19,7 +19,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:3000",
-      "https://plan-my-trip-iota.vercel.app", // ⬅️ YOUR VERCEL DOMAIN
+      "https://plan-my-trip-iota.vercel.app", // ⬅️VERCEL DOMAIN
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
