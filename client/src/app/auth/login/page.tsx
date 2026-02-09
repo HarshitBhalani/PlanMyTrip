@@ -13,8 +13,36 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const validateForm = () => {
+    if (!email.trim()) {
+      return "Email is required";
+    }
+
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      return "Please enter a valid email address";
+    }
+
+    if (!password) {
+      return "Password is required";
+    }
+
+    if (password.length < 6) {
+      return "Password must be at least 6 characters long";
+    }
+
+    return "";
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const errorMessage = validateForm();
+    if (errorMessage) {
+      toast.error("Validation error", {
+        description: errorMessage,
+      });
+      return;
+    }
 
     try {
       setLoading(true);
@@ -51,7 +79,6 @@ export default function LoginPage() {
           className="w-full border p-2 rounded"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          required
         />
 
         <input
@@ -60,7 +87,6 @@ export default function LoginPage() {
           className="w-full border p-2 rounded"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          required
         />
 
         <button

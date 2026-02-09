@@ -14,13 +14,45 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const validateForm = () => {
+    if (!fullName.trim()) {
+      return "Full name is required";
+    }
+
+    if (!email.trim()) {
+      return "Email is required";
+    }
+
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      return "Please enter a valid email address";
+    }
+
+    if (!password) {
+      return "Password is required";
+    }
+
+    if (password.length < 6) {
+      return "Password must be at least 6 characters long";
+    }
+
+    return "";
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const errorMessage = validateForm();
+    if (errorMessage) {
+      toast.error("Validation error", {
+        description: errorMessage,
+      });
+      return;
+    }
 
     try {
       setLoading(true);
 
-      // 🔐 SIGNUP API — creates user + returns token
+      // 🔐 SIGNUP API
       const res = await apiRequest("/api/auth/signup", "POST", {
         fullName,
         email,
@@ -30,12 +62,10 @@ export default function SignupPage() {
       // ✅ Save token + user
       saveAuth(res.token, res.user);
 
-      // ✅ Success toast
       toast.success("Account created 🎉", {
         description: "Welcome! Redirecting to create trip...",
       });
 
-      // ✅ Redirect
       router.push("/create-trip");
     } catch (err: any) {
       toast.error("Signup failed", {
@@ -59,7 +89,6 @@ export default function SignupPage() {
           className="w-full border rounded px-3 py-2"
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
-          required
         />
 
         <input
@@ -68,7 +97,6 @@ export default function SignupPage() {
           className="w-full border rounded px-3 py-2"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          required
         />
 
         <input
@@ -77,7 +105,6 @@ export default function SignupPage() {
           className="w-full border rounded px-3 py-2"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          required
         />
 
         <button

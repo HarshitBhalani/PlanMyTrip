@@ -4,11 +4,11 @@ import UserPreference from "../models/UserPreference.model";
 import { generateTripWithAI } from "../services/ai.service";
 
 /* =========================================================
-   GENERATE TRIP (AI + USER PREFERENCES)
+   GENERATE TRIP (AI + LOGIC-DRIVEN DATA)
 ========================================================= */
 export const generateTrip = async (req: any, res: Response) => {
   try {
-    const { destination, days, budgetType, travelers } = req.body || {};
+    const { destination, days, budgetType, travelers } = req.body;
 
     if (!destination || !days || !budgetType || !travelers) {
       return res.status(400).json({
@@ -17,47 +17,89 @@ export const generateTrip = async (req: any, res: Response) => {
       });
     }
 
-    /* 🔹 FETCH USER PREFERENCES (PHASE 5) */
+    /* =====================================================
+       USER PREFERENCES (OPTIONAL)
+    ===================================================== */
     const preferences = await UserPreference.findOne({
       user: req.user._id,
     });
 
     const finalBudget = preferences?.budgetRange || budgetType;
-    const hotelType = preferences?.hotelType || "budget";
-    const travelPace = preferences?.travelPace || "balanced";
-    const foodPreference = preferences?.foodPreference || "both";
-    const transportPreference =
-      preferences?.transportPreference || "mixed";
 
-    /* 🔹 SMART AI PROMPT */
+    /* =====================================================
+       COST CALCULATION (NO AI GUESSING)
+    ===================================================== */
+    const baseCostPerDay: Record<string, number> = {
+      cheap: 1200,
+      moderate: 3000,
+      luxury: 7000,
+    };
+
+    const travelerMultiplier: Record<string, number> = {
+      solo: 1,
+      couple: 1.8,
+      friends: 2.5,
+      family: 3,
+    };
+
+    const perDayCost =
+      (baseCostPerDay[finalBudget] || 3000) *
+      (travelerMultiplier[travelers] || 1);
+
+    const totalCost = Math.round(perDayCost * Number(days));
+
+    /* =====================================================
+       TRANSPORT INFO (SHOWN FIRST IN UI)
+    ===================================================== */
+    const transport = {
+      railwayStation: `${destination} Junction Railway Station`,
+      busStation: `${destination} Central Bus Stand`,
+      airport: `${destination} Airport (nearest available)`,
+    };
+
+    /* =====================================================
+       HOTEL LOGIC (BASED ON BUDGET + TRAVELERS)
+    ===================================================== */
+    let hotelCategory = "";
+    let priceRange = "";
+
+    if (finalBudget === "cheap") {
+      hotelCategory = "Budget Hotel / Homestay";
+      priceRange = "₹800 – ₹2,000";
+    } else if (finalBudget === "moderate") {
+      hotelCategory = "3-Star / 4-Star Hotel";
+      priceRange = "₹3,000 – ₹5,500";
+    } else {
+      hotelCategory = "Luxury 4-Star / 5-Star Hotel";
+      priceRange = "₹7,000 – ₹12,000";
+    }
+
+    const bookingUrl = `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(
+      destination
+    )}`;
+
+    /* =====================================================
+       AI PROMPT (ONLY EXPERIENCE CONTENT)
+    ===================================================== */
     const prompt = `
-You are a professional travel planner AI.
+You are a professional travel planner.
 
 STRICT RULES:
-- Return ONLY valid JSON
+- Output ONLY valid JSON
 - No markdown
 - No explanation
-- No extra text
 
-Trip details:
+Trip Details:
 Destination: ${destination}
-Number of days: ${days}
+Days: ${days}
 Travelers: ${travelers}
 
-User Preferences:
-Budget level: ${finalBudget}
-Hotel type: ${hotelType}
-Travel pace: ${travelPace}
-Food preference: ${foodPreference}
-Transport preference: ${transportPreference}
-
-Return JSON in this EXACT format:
+Return JSON in this exact structure:
 
 {
   "tripTitle": "",
   "overview": {
     "bestTimeToVisit": "",
-    "estimatedBudget": "",
     "weatherNote": ""
   },
   "itinerary": [
@@ -72,21 +114,11 @@ Return JSON in this EXACT format:
   "placesToVisit": [
     {
       "name": "",
-      "description": "",
-      "recommendedTime": ""
+      "description": ""
     }
   ],
-  "hotels": [
-    {
-      "name": "",
-      "area": "",
-      "priceRangePerNight": "",
-      "rating": "",
-      "bookingUrl": ""
-    }
-  ],
-  "foodRecommendations": [""],
-  "travelTips": [""]
+  "foodRecommendations": [],
+  "travelTips": []
 }
 `;
 
@@ -99,10 +131,10 @@ Return JSON in this EXACT format:
       });
     }
 
-    let tripData;
+    let aiTrip;
     try {
-      tripData = JSON.parse(aiText);
-    } catch (error) {
+      aiTrip = JSON.parse(aiText);
+    } catch {
       return res.status(500).json({
         success: false,
         message: "AI returned invalid JSON",
@@ -110,15 +142,38 @@ Return JSON in this EXACT format:
       });
     }
 
+    /* =====================================================
+       FINAL RESPONSE (UI-READY)
+    ===================================================== */
     return res.status(200).json({
       success: true,
-      trip: tripData,
-      preferencesUsed: {
-        budget: finalBudget,
-        hotelType,
-        travelPace,
-        foodPreference,
-        transportPreference,
+      trip: {
+        tripTitle: aiTrip.tripTitle,
+        overview: aiTrip.overview,
+
+        transport,
+
+        itinerary: aiTrip.itinerary,
+        placesToVisit: aiTrip.placesToVisit,
+
+        hotels: [
+          {
+            name: `${destination} ${hotelCategory}`,
+            category: hotelCategory,
+            priceRangePerNight: priceRange,
+            rating: finalBudget === "luxury" ? "4.5/5" : "4/5",
+            bookingUrl,
+          },
+        ],
+
+        foodRecommendations: aiTrip.foodRecommendations,
+        travelTips: aiTrip.travelTips,
+
+        estimatedBudget: {
+          perDay: `₹${Math.round(perDayCost)}`,
+          total: `₹${totalCost}`,
+          note: `Estimated cost for ${travelers} on a ${finalBudget} budget`,
+        },
       },
     });
   } catch (error) {
@@ -168,7 +223,7 @@ export const saveTrip = async (req: any, res: Response) => {
 };
 
 /* =========================================================
-   GET MY TRIPS (DASHBOARD)
+   GET MY TRIPS
 ========================================================= */
 export const getMyTrips = async (req: any, res: Response) => {
   try {
@@ -181,7 +236,6 @@ export const getMyTrips = async (req: any, res: Response) => {
       trips,
     });
   } catch (error) {
-    console.error("GET MY TRIPS ERROR:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch trips",
@@ -211,7 +265,6 @@ export const getTripById = async (req: any, res: Response) => {
       trip,
     });
   } catch (error) {
-    console.error("GET TRIP ERROR:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch trip",
@@ -241,7 +294,6 @@ export const deleteTrip = async (req: any, res: Response) => {
       message: "Trip deleted successfully",
     });
   } catch (error) {
-    console.error("DELETE TRIP ERROR:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to delete trip",

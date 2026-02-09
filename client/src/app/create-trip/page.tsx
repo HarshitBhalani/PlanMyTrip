@@ -19,9 +19,7 @@ export default function CreateTripPage() {
   const generateTrip = async () => {
     setError("");
 
-    // ✅ 1. Block if user not logged in
     const token = localStorage.getItem("token");
-
     if (!token) {
       setError("Please login or register to generate your trip.");
       return;
@@ -39,13 +37,8 @@ export default function CreateTripPage() {
       const response = await apiRequest(
         "/api/trip/generate",
         "POST",
-        {
-          destination,
-          days,
-          budgetType,
-          travelers,
-        },
-        token,
+        { destination, days, budgetType, travelers },
+        token
       );
 
       if (!response.success) {
@@ -54,7 +47,6 @@ export default function CreateTripPage() {
 
       setTripResult(response.trip);
     } catch (err: any) {
-      // ✅ 2. Friendly message mapping
       if (
         err.message?.toLowerCase().includes("token") ||
         err.message?.toLowerCase().includes("authorized")
@@ -79,7 +71,7 @@ export default function CreateTripPage() {
         a customized itinerary based on your preferences.
       </p>
 
-      {/* FORM */}
+      {/* ================= FORM ================= */}
       <div className="space-y-8">
         {/* DESTINATION */}
         <div>
@@ -113,88 +105,42 @@ export default function CreateTripPage() {
           <label className="font-semibold block mb-4">
             What is Your Budget?
           </label>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <OptionCard
-              title="Cheap"
-              desc="Stay conscious of costs"
-              icon="💵"
-              selected={budgetType === "cheap"}
-              onClick={() => setBudgetType("cheap")}
-            />
-            <OptionCard
-              title="Moderate"
-              desc="Keep cost on the average side"
-              icon="💰"
-              selected={budgetType === "moderate"}
-              onClick={() => setBudgetType("moderate")}
-            />
-            <OptionCard
-              title="Luxury"
-              desc="Don't worry about cost"
-              icon="💎"
-              selected={budgetType === "luxury"}
-              onClick={() => setBudgetType("luxury")}
-            />
+          <div className="grid md:grid-cols-3 gap-4">
+            <OptionCard title="Cheap" desc="Low cost travel" icon="💵"
+              selected={budgetType === "cheap"} onClick={() => setBudgetType("cheap")} />
+            <OptionCard title="Moderate" desc="Balanced experience" icon="💰"
+              selected={budgetType === "moderate"} onClick={() => setBudgetType("moderate")} />
+            <OptionCard title="Luxury" desc="Premium travel" icon="💎"
+              selected={budgetType === "luxury"} onClick={() => setBudgetType("luxury")} />
           </div>
         </div>
 
         {/* TRAVELERS */}
         <div>
           <label className="font-semibold block mb-4">
-            Who do you plan on traveling with on your next adventure?
+            Who do you plan on traveling with?
           </label>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <OptionCard
-              title="Just Me"
-              desc="A solo traveler in exploration"
-              icon="🧍"
-              selected={travelers === "solo"}
-              onClick={() => setTravelers("solo")}
-            />
-            <OptionCard
-              title="Couple"
-              desc="Two travelers in tandem"
-              icon="🥂"
-              selected={travelers === "couple"}
-              onClick={() => setTravelers("couple")}
-            />
-            <OptionCard
-              title="Family"
-              desc="A group of fun loving adventurers"
-              icon="🏡"
-              selected={travelers === "family"}
-              onClick={() => setTravelers("family")}
-            />
-            <OptionCard
-              title="Friends"
-              desc="A bunch of thrill-seekers"
-              icon="⛵"
-              selected={travelers === "friends"}
-              onClick={() => setTravelers("friends")}
-            />
+          <div className="grid md:grid-cols-4 gap-4">
+            <OptionCard title="Just Me" desc="Solo traveler" icon="🧍"
+              selected={travelers === "solo"} onClick={() => setTravelers("solo")} />
+            <OptionCard title="Couple" desc="Two travelers" icon="🥂"
+              selected={travelers === "couple"} onClick={() => setTravelers("couple")} />
+            <OptionCard title="Family" desc="Family trip" icon="🏡"
+              selected={travelers === "family"} onClick={() => setTravelers("family")} />
+            <OptionCard title="Friends" desc="Group travel" icon="⛵"
+              selected={travelers === "friends"} onClick={() => setTravelers("friends")} />
           </div>
         </div>
 
         {/* ERROR */}
         {error && (
-          <p className="text-red-600 font-medium mt-4">
-            {error && (
-              <div className="mt-4 border rounded-md p-4 bg-red-50">
-                <p className="text-red-700 font-medium mb-2">{error}</p>
-                <div className="flex gap-3">
-                  <a
-                    href="/auth/login"
-                    className="px-4 py-2 bg-black text-white rounded"
-                  >
-                    Login
-                  </a>
-                  <a href="/auth/signup" className="px-4 py-2 border rounded">
-                    Register
-                  </a>
-                </div>
-              </div>
-            )}
-          </p>
+          <div className="border rounded-md p-4 bg-red-50">
+            <p className="text-red-700 font-medium mb-2">{error}</p>
+            <div className="flex gap-3">
+              <a href="/auth/login" className="px-4 py-2 bg-black text-white rounded">Login</a>
+              <a href="/auth/signup" className="px-4 py-2 border rounded">Register</a>
+            </div>
+          </div>
         )}
 
         {/* BUTTON */}
@@ -203,9 +149,7 @@ export default function CreateTripPage() {
             onClick={generateTrip}
             disabled={loading}
             className={`px-6 py-3 rounded-md text-white ${
-              loading
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-black hover:bg-gray-800"
+              loading ? "bg-gray-400" : "bg-black hover:bg-gray-800"
             }`}
           >
             {loading ? "Generating your trip..." : "Generate Trip"}
@@ -213,35 +157,56 @@ export default function CreateTripPage() {
         </div>
       </div>
 
-      {/* RESULT */}
+      {/* ================= RESULT ================= */}
       {tripResult && (
-        <div className="mt-12 border-t pt-10">
-          <h2 className="text-2xl font-bold mb-4">{tripResult.tripTitle}</h2>
+        <div className="mt-12 border-t pt-10 space-y-8">
+          <h2 className="text-3xl font-bold">{tripResult.tripTitle}</h2>
 
-          <p className="text-gray-700 mb-6">
-            {tripResult.overview?.weatherNote}
-          </p>
+          {/* TRANSPORT */}
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h3 className="font-semibold mb-2">How to Reach</h3>
+            <p><strong>Railway:</strong> {tripResult.transport?.railwayStation}</p>
+            <p><strong>Bus:</strong> {tripResult.transport?.busStation}</p>
+            <p><strong>Airport:</strong> {tripResult.transport?.airport}</p>
+          </div>
 
-          <div className="space-y-6">
-            {tripResult.itinerary?.map((day: any) => (
-              <div key={day.day} className="border rounded-lg p-5">
-                <h3 className="font-semibold text-lg mb-2">Day {day.day}</h3>
-                <ul className="space-y-1 text-gray-700">
-                  <li>
-                    <strong>Morning:</strong> {day.morning}
-                  </li>
-                  <li>
-                    <strong>Afternoon:</strong> {day.afternoon}
-                  </li>
-                  <li>
-                    <strong>Evening:</strong> {day.evening}
-                  </li>
-                  <li className="text-sm text-gray-500">
-                    Tip: {day.localTravelTip}
-                  </li>
-                </ul>
+          {/* ITINERARY */}
+          {tripResult.itinerary?.map((day: any) => (
+            <div key={day.day} className="border rounded-lg p-5">
+              <h3 className="font-semibold text-lg mb-2">Day {day.day}</h3>
+              <p><strong>Morning:</strong> {day.morning}</p>
+              <p><strong>Afternoon:</strong> {day.afternoon}</p>
+              <p><strong>Evening:</strong> {day.evening}</p>
+              <p className="text-sm text-gray-500 mt-2">Tip: {day.localTravelTip}</p>
+            </div>
+          ))}
+
+          {/* HOTELS */}
+          <div>
+            <h3 className="text-xl font-semibold mb-3">Hotel Options</h3>
+            {tripResult.hotels?.map((hotel: any, i: number) => (
+              <div key={i} className="border p-4 rounded-lg flex justify-between items-center mb-3">
+                <div>
+                  <p className="font-semibold">{hotel.name}</p>
+                  <p>{hotel.priceRangePerNight}</p>
+                  <p>⭐ {hotel.rating}</p>
+                </div>
+                <a
+                  href={hotel.bookingUrl}
+                  target="_blank"
+                  className="bg-black text-white px-4 py-2 rounded"
+                >
+                  Book
+                </a>
               </div>
             ))}
+          </div>
+
+          {/* BUDGET */}
+          <div className="bg-green-50 p-4 rounded-lg">
+            <h3 className="font-semibold">Estimated Budget</h3>
+            <p><strong>Per Day:</strong> {tripResult.estimatedBudget?.perDay}</p>
+            <p><strong>Total:</strong> {tripResult.estimatedBudget?.total}</p>
           </div>
         </div>
       )}
@@ -249,8 +214,7 @@ export default function CreateTripPage() {
   );
 }
 
-/* ---------- REUSABLE CARD ---------- */
-
+/* ---------- CARD ---------- */
 function OptionCard({ title, desc, icon, selected, onClick }: any) {
   return (
     <div
