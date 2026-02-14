@@ -42,6 +42,7 @@ export default function Navbar() {
 
         <div className="flex items-center gap-6">
           <Link href="/create-trip">Create Trip</Link>
+          <Link href="/saved-trips">Saved Trips</Link>
 
           {!user ? (
             <Link href="/auth/login">Login</Link>

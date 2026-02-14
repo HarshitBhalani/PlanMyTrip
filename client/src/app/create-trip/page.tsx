@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { apiRequest } from "../lib/api";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -15,6 +15,22 @@ export default function CreateTripPage() {
 
   const [loading, setLoading] = useState(false);
   const [tripResult, setTripResult] = useState<any>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Load pre-selected destination from localStorage
+  useEffect(() => {
+    const preSelectedDestination = localStorage.getItem("preSelectedDestination");
+    if (preSelectedDestination) {
+      setDestination(preSelectedDestination);
+      // Clear it after loading
+      localStorage.removeItem("preSelectedDestination");
+      // Show a toast
+      toast.success(`Destination set to ${preSelectedDestination}! 🎉`);
+    }
+  }, []);
 
   /* =====================================================
      DESTINATION VALIDATION
@@ -84,6 +100,8 @@ export default function CreateTripPage() {
 
     setLoading(true);
     setTripResult(null);
+    setIsSaved(false);
+    setHasUnsavedChanges(false);
 
     try {
       const response = await apiRequest(
@@ -107,6 +125,229 @@ export default function CreateTripPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  /* =====================================================
+     SAVE TRIP
+  ===================================================== */
+  const saveTrip = async () => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      toast.error("Authentication required");
+      return;
+    }
+
+    if (!tripResult) {
+      toast.error("No trip to save");
+      return;
+    }
+
+    // Check if already saved and no changes
+    if (isSaved && !hasUnsavedChanges) {
+      toast.info("Trip already saved", {
+        description: "Make changes to save again",
+      });
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const response = await apiRequest(
+        "/api/trip/save",
+        "POST",
+        {
+          tripData: tripResult,
+          destination,
+          days,
+          budgetType,
+          travelers,
+        },
+        token
+      );
+
+      if (!response.success) {
+        throw new Error(response.message || "Failed to save trip");
+      }
+
+      setIsSaved(true);
+      setHasUnsavedChanges(false);
+
+      toast.success("Trip saved successfully! 🎉", {
+        description: "You can view it in your saved trips",
+        action: {
+          label: "View Saved Trips",
+          onClick: () => router.push("/saved-trips"),
+        },
+      });
+    } catch (err: any) {
+      toast.error("Failed to save trip", {
+        description: err.message || "Please try again",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* =====================================================
+     EDIT FUNCTIONS
+  ===================================================== */
+  const markAsEdited = () => {
+    if (isSaved) {
+      setHasUnsavedChanges(true);
+    }
+  };
+
+  const addDay = () => {
+    if (!tripResult || !tripResult.itinerary) return;
+
+    const newDayNumber = tripResult.itinerary.length + 1;
+    const newDay = {
+      day: newDayNumber,
+      morning: "Add morning activities",
+      afternoon: "Add afternoon activities",
+      evening: "Add evening activities",
+      localTravelTip: "Add local travel tip",
+    };
+
+    setTripResult({
+      ...tripResult,
+      itinerary: [...tripResult.itinerary, newDay],
+    });
+
+    markAsEdited();
+    toast.success(`Day ${newDayNumber} added`);
+  };
+
+  const removeDay = (dayNumber: number) => {
+    if (!tripResult || !tripResult.itinerary) return;
+
+    if (tripResult.itinerary.length <= 1) {
+      toast.error("Cannot remove the last day");
+      return;
+    }
+
+    const updatedItinerary = tripResult.itinerary
+      .filter((day: any) => day.day !== dayNumber)
+      .map((day: any, index: number) => ({
+        ...day,
+        day: index + 1,
+      }));
+
+    setTripResult({
+      ...tripResult,
+      itinerary: updatedItinerary,
+    });
+
+    markAsEdited();
+    toast.success(`Day ${dayNumber} removed`);
+  };
+
+  const updateDayField = (dayNumber: number, field: string, value: string) => {
+    if (!tripResult || !tripResult.itinerary) return;
+
+    const updatedItinerary = tripResult.itinerary.map((day: any) =>
+      day.day === dayNumber ? { ...day, [field]: value } : day
+    );
+
+    setTripResult({
+      ...tripResult,
+      itinerary: updatedItinerary,
+    });
+
+    markAsEdited();
+  };
+
+  const updateTripTitle = (value: string) => {
+    setTripResult({
+      ...tripResult,
+      tripTitle: value,
+    });
+    markAsEdited();
+  };
+
+  const addHotel = () => {
+    if (!tripResult) return;
+
+    const newHotel = {
+      name: "New Hotel",
+      priceRangePerNight: "₹0 - ₹0",
+      rating: "0.0",
+      bookingUrl: "https://www.booking.com",
+    };
+
+    const updatedHotels = [...(tripResult.hotels || []), newHotel];
+
+    setTripResult({
+      ...tripResult,
+      hotels: updatedHotels,
+    });
+
+    markAsEdited();
+    toast.success("Hotel added");
+  };
+
+  const removeHotel = (index: number) => {
+    if (!tripResult || !tripResult.hotels) return;
+
+    if (tripResult.hotels.length <= 1) {
+      toast.error("Cannot remove the last hotel");
+      return;
+    }
+
+    const updatedHotels = tripResult.hotels.filter((_: any, i: number) => i !== index);
+
+    setTripResult({
+      ...tripResult,
+      hotels: updatedHotels,
+    });
+
+    markAsEdited();
+    toast.success("Hotel removed");
+  };
+
+  const updateHotel = (index: number, field: string, value: string) => {
+    if (!tripResult || !tripResult.hotels) return;
+
+    const updatedHotels = tripResult.hotels.map((hotel: any, i: number) =>
+      i === index ? { ...hotel, [field]: value } : hotel
+    );
+
+    setTripResult({
+      ...tripResult,
+      hotels: updatedHotels,
+    });
+
+    markAsEdited();
+  };
+
+  const updateTransport = (field: string, value: string) => {
+    if (!tripResult) return;
+
+    setTripResult({
+      ...tripResult,
+      transport: {
+        ...tripResult.transport,
+        [field]: value,
+      },
+    });
+
+    markAsEdited();
+  };
+
+  const updateBudget = (field: string, value: string) => {
+    if (!tripResult) return;
+
+    setTripResult({
+      ...tripResult,
+      estimatedBudget: {
+        ...tripResult.estimatedBudget,
+        [field]: value,
+      },
+    });
+
+    markAsEdited();
   };
 
   return (
@@ -213,46 +454,243 @@ export default function CreateTripPage() {
       {/* ================= RESULT ================= */}
       {tripResult && (
         <div className="mt-12 border-t pt-10 space-y-8">
-          <h2 className="text-3xl font-bold">{tripResult.tripTitle}</h2>
+          {/* ACTION BUTTONS */}
+          <div className="flex gap-4 justify-end">
+            <button
+              onClick={() => setIsEditing(!isEditing)}
+              className="px-6 py-3 rounded-md bg-[#1F2937] text-white hover:bg-gray-700"
+            >
+              {isEditing ? "Done Editing" : "Edit"}
+            </button>
+            <button
+              onClick={saveTrip}
+              disabled={saving || (isSaved && !hasUnsavedChanges)}
+              className={`px-6 py-3 rounded-md text-white ${
+                saving || (isSaved && !hasUnsavedChanges)
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-[#1F2937] hover:bg-gray-700"
+              }`}
+            >
+              {saving ? "Saving..." : isSaved && !hasUnsavedChanges ? "Saved ✓" : "Save"}
+            </button>
+          </div>
+
+          {/* TRIP TITLE */}
+          {isEditing ? (
+            <input
+              type="text"
+              value={tripResult.tripTitle}
+              onChange={(e) => updateTripTitle(e.target.value)}
+              className="text-3xl font-bold w-full border-b-2 border-gray-300 focus:border-black outline-none"
+            />
+          ) : (
+            <h2 className="text-3xl font-bold">{tripResult.tripTitle}</h2>
+          )}
 
           {/* TRANSPORT */}
           <div className="bg-gray-50 p-4 rounded-lg">
             <h3 className="font-semibold mb-2">How to Reach</h3>
-            <p><strong>Railway:</strong> {tripResult.transport?.railwayStation}</p>
-            <p><strong>Bus:</strong> {tripResult.transport?.busStation}</p>
-            <p><strong>Airport:</strong> {tripResult.transport?.airport}</p>
+            {isEditing ? (
+              <div className="space-y-2">
+                <div>
+                  <label className="text-sm text-gray-600">Railway:</label>
+                  <input
+                    type="text"
+                    value={tripResult.transport?.railwayStation || ""}
+                    onChange={(e) => updateTransport("railwayStation", e.target.value)}
+                    className="w-full border rounded px-2 py-1 mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600">Bus:</label>
+                  <input
+                    type="text"
+                    value={tripResult.transport?.busStation || ""}
+                    onChange={(e) => updateTransport("busStation", e.target.value)}
+                    className="w-full border rounded px-2 py-1 mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600">Airport:</label>
+                  <input
+                    type="text"
+                    value={tripResult.transport?.airport || ""}
+                    onChange={(e) => updateTransport("airport", e.target.value)}
+                    className="w-full border rounded px-2 py-1 mt-1"
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+                <p><strong>Railway:</strong> {tripResult.transport?.railwayStation}</p>
+                <p><strong>Bus:</strong> {tripResult.transport?.busStation}</p>
+                <p><strong>Airport:</strong> {tripResult.transport?.airport}</p>
+              </>
+            )}
           </div>
 
           {/* ITINERARY */}
-          {tripResult.itinerary?.map((day: any) => (
-            <div key={day.day} className="border rounded-lg p-5">
-              <h3 className="font-semibold text-lg mb-2">Day {day.day}</h3>
-              <p><strong>Morning:</strong> {day.morning}</p>
-              <p><strong>Afternoon:</strong> {day.afternoon}</p>
-              <p><strong>Evening:</strong> {day.evening}</p>
-              <p className="text-sm text-gray-500 mt-2">
-                Tip: {day.localTravelTip}
-              </p>
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-semibold">Itinerary</h3>
+              {isEditing && (
+                <button
+                  onClick={addDay}
+                  className="px-4 py-2 bg-[#1F2937] text-white rounded-md hover:bg-gray-700"
+                >
+                  + Add Day
+                </button>
+              )}
             </div>
-          ))}
+
+            {tripResult.itinerary?.map((day: any) => (
+              <div key={day.day} className="border rounded-lg p-5 mb-4">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="font-semibold text-lg">Day {day.day}</h3>
+                  {isEditing && (
+                    <button
+                      onClick={() => removeDay(day.day)}
+                      className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600"
+                    >
+                      Remove Day
+                    </button>
+                  )}
+                </div>
+
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Morning:</label>
+                      <textarea
+                        value={day.morning}
+                        onChange={(e) => updateDayField(day.day, "morning", e.target.value)}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                        rows={2}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Afternoon:</label>
+                      <textarea
+                        value={day.afternoon}
+                        onChange={(e) => updateDayField(day.day, "afternoon", e.target.value)}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                        rows={2}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Evening:</label>
+                      <textarea
+                        value={day.evening}
+                        onChange={(e) => updateDayField(day.day, "evening", e.target.value)}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                        rows={2}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Local Travel Tip:</label>
+                      <input
+                        type="text"
+                        value={day.localTravelTip}
+                        onChange={(e) => updateDayField(day.day, "localTravelTip", e.target.value)}
+                        className="w-full border rounded px-3 py-2 mt-1"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p><strong>Morning:</strong> {day.morning}</p>
+                    <p><strong>Afternoon:</strong> {day.afternoon}</p>
+                    <p><strong>Evening:</strong> {day.evening}</p>
+                    <p className="text-sm text-gray-500 mt-2">
+                      Tip: {day.localTravelTip}
+                    </p>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
 
           {/* HOTELS */}
           <div>
-            <h3 className="text-xl font-semibold mb-3">Hotel Options</h3>
-            {tripResult.hotels?.map((hotel: any, i: number) => (
-              <div key={i} className="border p-4 rounded-lg flex justify-between items-center mb-3">
-                <div>
-                  <p className="font-semibold">{hotel.name}</p>
-                  <p>{hotel.priceRangePerNight}</p>
-                  <p>⭐ {hotel.rating}</p>
-                </div>
-                <a
-                  href={hotel.bookingUrl}
-                  target="_blank"
-                  className="bg-black text-white px-4 py-2 rounded"
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-xl font-semibold">Hotel Options</h3>
+              {isEditing && (
+                <button
+                  onClick={addHotel}
+                  className="px-4 py-2 bg-[#1F2937] text-white rounded-md hover:bg-gray-700"
                 >
-                  Book
-                </a>
+                  + Add Hotel
+                </button>
+              )}
+            </div>
+
+            {tripResult.hotels?.map((hotel: any, i: number) => (
+              <div key={i} className="border p-4 rounded-lg mb-3">
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1 space-y-3">
+                        <div>
+                          <label className="text-sm text-gray-600">Hotel Name:</label>
+                          <input
+                            type="text"
+                            value={hotel.name}
+                            onChange={(e) => updateHotel(i, "name", e.target.value)}
+                            className="w-full border rounded px-3 py-2 mt-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm text-gray-600">Price Range:</label>
+                          <input
+                            type="text"
+                            value={hotel.priceRangePerNight}
+                            onChange={(e) => updateHotel(i, "priceRangePerNight", e.target.value)}
+                            className="w-full border rounded px-3 py-2 mt-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm text-gray-600">Rating:</label>
+                          <input
+                            type="text"
+                            value={hotel.rating}
+                            onChange={(e) => updateHotel(i, "rating", e.target.value)}
+                            className="w-full border rounded px-3 py-2 mt-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm text-gray-600">Booking URL:</label>
+                          <input
+                            type="text"
+                            value={hotel.bookingUrl}
+                            onChange={(e) => updateHotel(i, "bookingUrl", e.target.value)}
+                            className="w-full border rounded px-3 py-2 mt-1"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeHotel(i)}
+                        className="ml-4 px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-semibold">{hotel.name}</p>
+                      <p>{hotel.priceRangePerNight}</p>
+                      <p>⭐ {hotel.rating}</p>
+                    </div>
+                    <a
+                      href={hotel.bookingUrl}
+                      target="_blank"
+                      className="bg-black text-white px-4 py-2 rounded"
+                    >
+                      Book
+                    </a>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -260,8 +698,33 @@ export default function CreateTripPage() {
           {/* BUDGET */}
           <div className="bg-green-50 p-4 rounded-lg">
             <h3 className="font-semibold">Estimated Budget</h3>
-            <p><strong>Per Day:</strong> {tripResult.estimatedBudget?.perDay}</p>
-            <p><strong>Total:</strong> {tripResult.estimatedBudget?.total}</p>
+            {isEditing ? (
+              <div className="space-y-2 mt-2">
+                <div>
+                  <label className="text-sm text-gray-600">Per Day:</label>
+                  <input
+                    type="text"
+                    value={tripResult.estimatedBudget?.perDay || ""}
+                    onChange={(e) => updateBudget("perDay", e.target.value)}
+                    className="w-full border rounded px-2 py-1 mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600">Total:</label>
+                  <input
+                    type="text"
+                    value={tripResult.estimatedBudget?.total || ""}
+                    onChange={(e) => updateBudget("total", e.target.value)}
+                    className="w-full border rounded px-2 py-1 mt-1"
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+                <p><strong>Per Day:</strong> {tripResult.estimatedBudget?.perDay}</p>
+                <p><strong>Total:</strong> {tripResult.estimatedBudget?.total}</p>
+              </>
+            )}
           </div>
         </div>
       )}
