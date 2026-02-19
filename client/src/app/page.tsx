@@ -2,7 +2,17 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, ChevronLeft, Heart } from "lucide-react";
+import {
+  ChevronRight,
+  ChevronLeft,
+  Landmark,
+  Mountain,
+  Waves,
+  Compass,
+  Building2,
+  Trees,
+  type LucideIcon,
+} from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 
 export default function HomePage() {
@@ -55,6 +65,7 @@ export default function HomePage() {
   const categories = [
     {
       title: "Religious Places",
+      icon: Landmark as LucideIcon,
       destinations: [
         {
           name: "Dwarka",
@@ -84,6 +95,7 @@ export default function HomePage() {
     },
     {
       title: "Hill Stations",
+      icon: Mountain as LucideIcon,
       destinations: [
         {
           name: "Manali",
@@ -113,6 +125,7 @@ export default function HomePage() {
     },
     {
       title: "Beaches & Coastal",
+      icon: Waves as LucideIcon,
       destinations: [
         {
           name: "Goa",
@@ -142,6 +155,7 @@ export default function HomePage() {
     },
     {
       title: "Adventure & Trekking",
+      icon: Compass as LucideIcon,
       destinations: [
         {
           name: "Leh Ladakh",
@@ -171,6 +185,7 @@ export default function HomePage() {
     },
     {
       title: "Heritage & Cultural",
+      icon: Building2 as LucideIcon,
       destinations: [
         {
           name: "Jaipur",
@@ -196,6 +211,7 @@ export default function HomePage() {
     },
     {
       title: "Wildlife & Nature",
+      icon: Trees as LucideIcon,
       destinations: [
         {
           name: "Jim Corbett",
@@ -422,7 +438,7 @@ export default function HomePage() {
                   <div
                     key={idx}
                     onClick={() => handleDestinationClick(dest.name)}
-                    className="relative cursor-pointer flex-shrink-0 rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300 group/card"
+                    className="relative cursor-pointer flex-shrink-0 rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 group/card"
                     style={{ width: '240px', height: '200px' }}
                   >
                     <img
@@ -440,8 +456,12 @@ export default function HomePage() {
                     </div> */}
 
                     {/* Name */}
-                    <div className="absolute bottom-4 left-4">
+                    <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3">
                       <h3 className="text-white text-2xl font-bold drop-shadow-lg">{dest.name}</h3>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-sm font-semibold text-gray-900 opacity-0 translate-y-2 group-hover/card:opacity-100 group-hover/card:translate-y-0 transition-all duration-300">
+                        Plan Trip
+                        <ChevronRight className="h-4 w-4" />
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -465,7 +485,12 @@ export default function HomePage() {
           <div className="space-y-12">
             {categories.map((category, index) => (
               <div key={index} className="relative">
-                <h3 className="text-2xl font-semibold mb-6">{category.title}</h3>
+                <div className="mb-6 flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-700">
+                    <category.icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-2xl font-semibold">{category.title}</h3>
+                </div>
 
                 {/* Left Arrow */}
                 {categoryArrows[index]?.left && (
@@ -491,7 +516,7 @@ export default function HomePage() {
                         className="relative group/card cursor-pointer flex-shrink-0"
                         style={{ width: '320px', height: '240px' }}
                       >
-                        <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300">
+                        <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
                           <img
                             src={dest.image}
                             alt={dest.name}
@@ -502,6 +527,10 @@ export default function HomePage() {
                             <h4 className="text-white text-2xl font-bold drop-shadow-lg">
                               {dest.name}
                             </h4>
+                            <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-sm font-semibold text-gray-900 opacity-0 translate-y-2 group-hover/card:opacity-100 group-hover/card:translate-y-0 transition-all duration-300">
+                              Plan Trip
+                              <ChevronRight className="h-4 w-4" />
+                            </span>
                           </div>
                         </div>
                       </div>
