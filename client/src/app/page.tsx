@@ -423,7 +423,7 @@ export default function HomePage() {
                 {/* <div
                   onClick={() => router.push("/create-trip")}
                   className="relative cursor-pointer flex-shrink-0 rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300"
-                  style={{   width: '240px', height: '200px' }}
+                  style={{   width: '320px', height: '240px' }}
                 >
                   <div className="w-full h-full bg-gradient-to-br from-blue-900 to-blue-700 flex items-center justify-center">
                     <div className="text-center">
@@ -439,7 +439,7 @@ export default function HomePage() {
                     key={idx}
                     onClick={() => handleDestinationClick(dest.name)}
                     className="relative cursor-pointer flex-shrink-0 rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 group/card"
-                    style={{ width: '240px', height: '200px' }}
+                    style={{ width: '320px', height: '240px' }}
                   >
                     <img
                       src={dest.image}
@@ -456,9 +456,11 @@ export default function HomePage() {
                     </div> */}
 
                     {/* Name */}
-                    <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3">
-                      <h3 className="text-white text-2xl font-bold drop-shadow-lg">{dest.name}</h3>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-sm font-semibold text-gray-900 opacity-0 translate-y-2 group-hover/card:opacity-100 group-hover/card:translate-y-0 transition-all duration-300">
+                    <div className="absolute bottom-4 left-4 right-4">
+                      <h3 className="pr-24 text-white text-2xl font-bold drop-shadow-lg leading-tight">
+                        {dest.name}
+                      </h3>
+                      <span className="absolute bottom-0 right-0 inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-sm font-semibold text-gray-900 opacity-0 translate-y-2 group-hover/card:opacity-100 group-hover/card:translate-y-0 transition-all duration-300">
                         Plan Trip
                         <ChevronRight className="h-4 w-4" />
                       </span>
@@ -508,7 +510,7 @@ export default function HomePage() {
                   className="overflow-x-auto pb-4 scrollbar-hide scroll-smooth"
                   onScroll={() => updateCategoryArrowVisibility(index)}
                 >
-                  <div className="flex gap-6" style={{ width: 'max-content' }}>
+                  <div className="flex gap-4" style={{ width: 'max-content' }}>
                     {category.destinations.map((dest, idx) => (
                       <div
                         key={idx}
@@ -523,11 +525,11 @@ export default function HomePage() {
                             className="w-full h-full object-cover group-hover/card:scale-110 transition-transform duration-500"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
-                          <div className="absolute bottom-0 left-0 right-0 p-6">
-                            <h4 className="text-white text-2xl font-bold drop-shadow-lg">
+                          <div className="absolute bottom-4 left-4 right-4">
+                            <h4 className="pr-24 text-white text-2xl font-bold drop-shadow-lg leading-tight">
                               {dest.name}
                             </h4>
-                            <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-sm font-semibold text-gray-900 opacity-0 translate-y-2 group-hover/card:opacity-100 group-hover/card:translate-y-0 transition-all duration-300">
+                            <span className="absolute bottom-0 right-0 inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-sm font-semibold text-gray-900 opacity-0 translate-y-2 group-hover/card:opacity-100 group-hover/card:translate-y-0 transition-all duration-300">
                               Plan Trip
                               <ChevronRight className="h-4 w-4" />
                             </span>

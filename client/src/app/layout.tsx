@@ -1,10 +1,9 @@
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import { Sonner } from "../components/ui/sonner";
-import TodoList from "@/components/TodoList";
 
 export const metadata = {
-  title: "AI Trip Planner",
+  title: "PlanMyTrip",
   description: "Plan trips with AI - Your personal travel curator",
 };
 
@@ -19,7 +18,6 @@ export default function RootLayout({
         <Navbar />
         {children}
         <Sonner />
-        <TodoList />
       </body>
     </html>
   );
