@@ -173,69 +173,6 @@ export default function SavedTripsPage() {
     });
   };
 
-  const addHotel = () => {
-    if (!selectedTrip) return;
-
-    const newHotel = {
-      name: "New Hotel",
-      priceRangePerNight: "₹0 - ₹0",
-      rating: "0.0",
-      bookingUrl: "https://www.booking.com",
-    };
-
-    const updatedHotels = [...(selectedTrip.tripData.hotels || []), newHotel];
-
-    setSelectedTrip({
-      ...selectedTrip,
-      tripData: {
-        ...selectedTrip.tripData,
-        hotels: updatedHotels,
-      },
-    });
-
-    toast.success("Hotel added");
-  };
-
-  const removeHotel = (index: number) => {
-    if (!selectedTrip || !selectedTrip.tripData.hotels) return;
-
-    if (selectedTrip.tripData.hotels.length <= 1) {
-      toast.error("Cannot remove the last hotel");
-      return;
-    }
-
-    const updatedHotels = selectedTrip.tripData.hotels.filter(
-      (_: any, i: number) => i !== index
-    );
-
-    setSelectedTrip({
-      ...selectedTrip,
-      tripData: {
-        ...selectedTrip.tripData,
-        hotels: updatedHotels,
-      },
-    });
-
-    toast.success("Hotel removed");
-  };
-
-  const updateHotel = (index: number, field: string, value: string) => {
-    if (!selectedTrip || !selectedTrip.tripData.hotels) return;
-
-    const updatedHotels = selectedTrip.tripData.hotels.map(
-      (hotel: any, i: number) =>
-        i === index ? { ...hotel, [field]: value } : hotel
-    );
-
-    setSelectedTrip({
-      ...selectedTrip,
-      tripData: {
-        ...selectedTrip.tripData,
-        hotels: updatedHotels,
-      },
-    });
-  };
-
   const updateTransport = (field: string, value: string) => {
     if (!selectedTrip) return;
 
@@ -577,103 +514,23 @@ export default function SavedTripsPage() {
                 <div>
                   <div className="flex justify-between items-center mb-4">
                     <h4 className="text-xl font-semibold">Hotel Options</h4>
-                    {isEditing && (
-                      <button
-                        onClick={addHotel}
-                        className="px-4 py-2 bg-[#1F2937] text-white rounded-md hover:bg-gray-700 text-sm font-medium"
-                      >
-                        + Add Hotel
-                      </button>
-                    )}
                   </div>
 
                   {selectedTrip.tripData.hotels.map((hotel: any, i: number) => (
                     <div key={i} className="border p-5 rounded-lg mb-3 bg-gray-50">
-                      {isEditing ? (
-                        <div className="space-y-3">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1 space-y-3">
-                              <div>
-                                <label className="text-sm text-gray-600 font-medium">
-                                  Hotel Name:
-                                </label>
-                                <input
-                                  type="text"
-                                  value={hotel.name}
-                                  onChange={(e) =>
-                                    updateHotel(i, "name", e.target.value)
-                                  }
-                                  className="w-full border rounded px-3 py-2 mt-1"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-sm text-gray-600 font-medium">
-                                  Price Range:
-                                </label>
-                                <input
-                                  type="text"
-                                  value={hotel.priceRangePerNight}
-                                  onChange={(e) =>
-                                    updateHotel(
-                                      i,
-                                      "priceRangePerNight",
-                                      e.target.value
-                                    )
-                                  }
-                                  className="w-full border rounded px-3 py-2 mt-1"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-sm text-gray-600 font-medium">
-                                  Rating:
-                                </label>
-                                <input
-                                  type="text"
-                                  value={hotel.rating}
-                                  onChange={(e) =>
-                                    updateHotel(i, "rating", e.target.value)
-                                  }
-                                  className="w-full border rounded px-3 py-2 mt-1"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-sm text-gray-600 font-medium">
-                                  Booking URL:
-                                </label>
-                                <input
-                                  type="text"
-                                  value={hotel.bookingUrl}
-                                  onChange={(e) =>
-                                    updateHotel(i, "bookingUrl", e.target.value)
-                                  }
-                                  className="w-full border rounded px-3 py-2 mt-1"
-                                />
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => removeHotel(i)}
-                              className="ml-4 px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600"
-                            >
-                              Remove
-                            </button>
-                          </div>
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="font-semibold text-lg">{hotel.name}</p>
+                          <p className="text-gray-600">{hotel.priceRangePerNight}</p>
                         </div>
-                      ) : (
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <p className="font-semibold text-lg">{hotel.name}</p>
-                            <p className="text-gray-600">{hotel.priceRangePerNight}</p>
-                            <p className="text-yellow-600">⭐ {hotel.rating}</p>
-                          </div>
-                          <a
-                            href={hotel.bookingUrl}
-                            target="_blank"
-                            className="bg-black text-white px-5 py-2 rounded-md hover:bg-gray-800 font-medium"
-                          >
-                            Book Now
-                          </a>
-                        </div>
-                      )}
+                        <a
+                          href={hotel.bookingUrl}
+                          target="_blank"
+                          className="bg-black text-white px-5 py-2 rounded-md hover:bg-gray-800 font-medium"
+                        >
+                          Book Now
+                        </a>
+                      </div>
                     </div>
                   ))}
                 </div>

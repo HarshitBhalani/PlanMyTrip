@@ -267,61 +267,6 @@ export default function CreateTripPage() {
     markAsEdited();
   };
 
-  const addHotel = () => {
-    if (!tripResult) return;
-
-    const newHotel = {
-      name: "New Hotel",
-      priceRangePerNight: "₹0 - ₹0",
-      rating: "0.0",
-      bookingUrl: "https://www.booking.com",
-    };
-
-    const updatedHotels = [...(tripResult.hotels || []), newHotel];
-
-    setTripResult({
-      ...tripResult,
-      hotels: updatedHotels,
-    });
-
-    markAsEdited();
-    toast.success("Hotel added");
-  };
-
-  const removeHotel = (index: number) => {
-    if (!tripResult || !tripResult.hotels) return;
-
-    if (tripResult.hotels.length <= 1) {
-      toast.error("Cannot remove the last hotel");
-      return;
-    }
-
-    const updatedHotels = tripResult.hotels.filter((_: any, i: number) => i !== index);
-
-    setTripResult({
-      ...tripResult,
-      hotels: updatedHotels,
-    });
-
-    markAsEdited();
-    toast.success("Hotel removed");
-  };
-
-  const updateHotel = (index: number, field: string, value: string) => {
-    if (!tripResult || !tripResult.hotels) return;
-
-    const updatedHotels = tripResult.hotels.map((hotel: any, i: number) =>
-      i === index ? { ...hotel, [field]: value } : hotel
-    );
-
-    setTripResult({
-      ...tripResult,
-      hotels: updatedHotels,
-    });
-
-    markAsEdited();
-  };
-
   const updateTransport = (field: string, value: string) => {
     if (!tripResult) return;
 
@@ -614,83 +559,23 @@ export default function CreateTripPage() {
           <div>
             <div className="flex justify-between items-center mb-3">
               <h3 className="text-xl font-semibold">Hotel Options</h3>
-              {isEditing && (
-                <button
-                  onClick={addHotel}
-                  className="px-4 py-2 bg-[#1F2937] text-white rounded-md hover:bg-gray-700"
-                >
-                  + Add Hotel
-                </button>
-              )}
             </div>
 
             {tripResult.hotels?.map((hotel: any, i: number) => (
               <div key={i} className="border p-4 rounded-lg mb-3">
-                {isEditing ? (
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1 space-y-3">
-                        <div>
-                          <label className="text-sm text-gray-600">Hotel Name:</label>
-                          <input
-                            type="text"
-                            value={hotel.name}
-                            onChange={(e) => updateHotel(i, "name", e.target.value)}
-                            className="w-full border rounded px-3 py-2 mt-1"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm text-gray-600">Price Range:</label>
-                          <input
-                            type="text"
-                            value={hotel.priceRangePerNight}
-                            onChange={(e) => updateHotel(i, "priceRangePerNight", e.target.value)}
-                            className="w-full border rounded px-3 py-2 mt-1"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm text-gray-600">Rating:</label>
-                          <input
-                            type="text"
-                            value={hotel.rating}
-                            onChange={(e) => updateHotel(i, "rating", e.target.value)}
-                            className="w-full border rounded px-3 py-2 mt-1"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm text-gray-600">Booking URL:</label>
-                          <input
-                            type="text"
-                            value={hotel.bookingUrl}
-                            onChange={(e) => updateHotel(i, "bookingUrl", e.target.value)}
-                            className="w-full border rounded px-3 py-2 mt-1"
-                          />
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => removeHotel(i)}
-                        className="ml-4 px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600"
-                      >
-                        Remove
-                      </button>
-                    </div>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="font-semibold">{hotel.name}</p>
+                    <p>{hotel.priceRangePerNight}</p>
                   </div>
-                ) : (
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-semibold">{hotel.name}</p>
-                      <p>{hotel.priceRangePerNight}</p>
-                      <p>⭐ {hotel.rating}</p>
-                    </div>
-                    <a
-                      href={hotel.bookingUrl}
-                      target="_blank"
-                      className="bg-black text-white px-4 py-2 rounded"
-                    >
-                      Book
-                    </a>
-                  </div>
-                )}
+                  <a
+                    href={hotel.bookingUrl}
+                    target="_blank"
+                    className="bg-black text-white px-4 py-2 rounded"
+                  >
+                    Book
+                  </a>
+                </div>
               </div>
             ))}
           </div>

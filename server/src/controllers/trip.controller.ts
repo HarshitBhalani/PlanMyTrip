@@ -3,6 +3,30 @@ import Trip from "../models/Trip.model";
 import UserPreference from "../models/UserPreference.model";
 import { generateTripWithAI } from "../services/ai.service";
 
+const sanitizeTripData = (tripData: any) => {
+  if (!tripData || typeof tripData !== "object") {
+    return tripData;
+  }
+
+  if (!Array.isArray(tripData.hotels)) {
+    return tripData;
+  }
+
+  const hotels = tripData.hotels.map((hotel: any) => {
+    if (!hotel || typeof hotel !== "object") {
+      return hotel;
+    }
+
+    const { rating, ...hotelWithoutRating } = hotel;
+    return hotelWithoutRating;
+  });
+
+  return {
+    ...tripData,
+    hotels,
+  };
+};
+
 /* =========================================================
    GENERATE TRIP (DESTINATION-ONLY, REAL-WORLD SAFE)
 ========================================================= */
@@ -201,7 +225,6 @@ Return JSON EXACTLY in this format:
             name: `${cleanedDestination} ${hotelCategory}`,
             category: hotelCategory,
             priceRangePerNight: priceRange,
-            rating: finalBudget === "luxury" ? "4.5/5" : "4/5",
             bookingUrl,
           },
         ],
@@ -239,13 +262,15 @@ export const saveTrip = async (req: any, res: Response) => {
       });
     }
 
+    const sanitizedTripData = sanitizeTripData(tripData);
+
     const trip = await Trip.create({
       user: req.user._id,
       destination,
       days,
       budgetType,
       travelers,
-      tripData,
+      tripData: sanitizedTripData,
     });
 
     return res.status(201).json({
@@ -271,9 +296,17 @@ export const getMyTrips = async (req: any, res: Response) => {
       createdAt: -1,
     });
 
+    const sanitizedTrips = trips.map((trip) => {
+      const tripObj = trip.toObject();
+      return {
+        ...tripObj,
+        tripData: sanitizeTripData(tripObj.tripData),
+      };
+    });
+
     return res.status(200).json({
       success: true,
-      trips,
+      trips: sanitizedTrips,
     });
   } catch {
     return res.status(500).json({
@@ -300,9 +333,14 @@ export const getTripById = async (req: any, res: Response) => {
       });
     }
 
+    const tripObj = trip.toObject();
+
     return res.status(200).json({
       success: true,
-      trip,
+      trip: {
+        ...tripObj,
+        tripData: sanitizeTripData(tripObj.tripData),
+      },
     });
   } catch {
     return res.status(500).json({
