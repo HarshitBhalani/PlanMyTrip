@@ -7,6 +7,8 @@ import {
   getTripById,
   deleteTrip,
   updateTrip,
+  shareTrip,
+  getPublicTripBySlug,
 } from "../controllers/trip.controller";
 import { protect } from "../middleware/auth.middleware";
 import {
@@ -32,6 +34,8 @@ router.post(
 );
 router.post("/save", protect, saveTrip);
 router.get("/my-trips", protect, getMyTrips);
+router.get("/public/:slug", getPublicTripBySlug);
+router.post("/:id/share", protect, shareTrip);
 router.get("/:id", protect, getTripById);
 router.put("/:id", protect, updateTrip);
 router.delete("/:id", protect, deleteTrip);

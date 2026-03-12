@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import crypto from "crypto";
 import Trip from "../models/Trip.model";
 import UserPreference from "../models/UserPreference.model";
 import { generateTripWithAI } from "../services/ai.service";
@@ -41,6 +42,25 @@ const sanitizeTripData = (tripData: any) => {
     ...tripData,
     hotels,
   };
+};
+
+const sanitizeSlugPart = (value: string) =>
+  normalizeDestination(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "trip";
+
+const buildShareSlug = (trip: {
+  destination?: string;
+  secondDestination?: string | null;
+  thirdDestination?: string | null;
+}) => {
+  const routeSlug = [trip.destination, trip.secondDestination, trip.thirdDestination]
+    .filter(Boolean)
+    .map((item) => sanitizeSlugPart(item as string))
+    .join("-");
+
+  return `${crypto.randomBytes(4).toString("hex")}-${routeSlug || "trip"}`;
 };
 
 const getTravelerDetails = (
@@ -238,30 +258,128 @@ const normalizeItinerary = (value: unknown) => {
   }));
 };
 
-const normalizeRecommendationList = (value: unknown) => {
-  if (!Array.isArray(value)) {
-    return [];
+const getFallbackFoodRecommendations = (destination: string) => {
+  const normalized = normalizeDestination(destination).toLowerCase();
+
+  if (/dwarka|nageshwar|somnath/.test(normalized)) {
+    return [
+      {
+        destination,
+        name: "Gujarati Thali",
+        description: `Try a traditional Gujarati thali near ${destination} with dal, sabzi, rotli, farsan, and sweets.`,
+      },
+      {
+        destination,
+        name: "Farsan And Street Snacks",
+        description: `Look for khaman, fafda, kachori, and light regional snacks around ${destination}.`,
+      },
+    ];
   }
 
-  return value
-    .map((item: any) => {
-      if (typeof item === "string") {
-        return item.trim();
-      }
+  if (/trimbakeshwar|bhimashankar|nashik|drushmeshwar|grishneshwar/.test(normalized)) {
+    return [
+      {
+        destination,
+        name: "Maharashtrian Thali",
+        description: `Try a local Maharashtrian thali near ${destination} with bhakri, pithla, varan-bhaat, and seasonal sabzi.`,
+      },
+      {
+        destination,
+        name: "Misal Pav And Local Breakfast",
+        description: `Look for misal pav, poha, sabudana dishes, and simple temple-town breakfast spots around ${destination}.`,
+      },
+    ];
+  }
 
-      if (!item || typeof item !== "object") {
-        return null;
-      }
+  if (/shirdi|ujjain|varanasi|ayodhya|haridwar|rishikesh|tirupati/.test(normalized)) {
+    return [
+      {
+        destination,
+        name: "Regional Thali",
+        description: `Try a clean regional thali near ${destination} for a simple and reliable meal during sightseeing.`,
+      },
+      {
+        destination,
+        name: "Temple Town Sweets And Snacks",
+        description: `Look for trusted local sweet shops and vegetarian snack counters around ${destination}.`,
+      },
+    ];
+  }
 
-      return {
-        destination:
-          typeof item.destination === "string" ? item.destination.trim() : "",
-        name: typeof item.name === "string" ? item.name.trim() : "",
-        description:
-          typeof item.description === "string" ? item.description.trim() : "",
-      };
-    })
-    .filter(Boolean);
+  return [
+    {
+      destination,
+      name: "Regional Thali",
+      description: `Try a regional thali or popular local veg meal near ${destination}.`,
+    },
+    {
+      destination,
+      name: "Popular Local Snacks",
+      description: `Ask for the most popular local breakfast or evening snack options around ${destination}.`,
+    },
+  ];
+};
+
+const normalizeRecommendationList = (value: unknown, destinations: string[] = []) => {
+  const normalizedItems = Array.isArray(value)
+    ? value
+        .map((item: any) => {
+          if (typeof item === "string") {
+            return item.trim();
+          }
+
+          if (!item || typeof item !== "object") {
+            return null;
+          }
+
+          return {
+            destination:
+              typeof item.destination === "string" ? item.destination.trim() : "",
+            name: typeof item.name === "string" ? item.name.trim() : "",
+            description:
+              typeof item.description === "string" ? item.description.trim() : "",
+          };
+        })
+        .filter(Boolean)
+    : [];
+
+  const usefulObjectRecommendations = normalizedItems.filter((item) => {
+    if (!item || typeof item === "string") {
+      return false;
+    }
+
+    const name = item.name.trim().toLowerCase();
+    const description = item.description.trim().toLowerCase();
+
+    if (!name && !description) {
+      return false;
+    }
+
+    if (
+      name === "local cuisine" ||
+      description === "enjoy the local cuisine and culture of the region" ||
+      description.includes("local cuisine and culture of the region")
+    ) {
+      return false;
+    }
+
+    return true;
+  }) as Array<{ destination: string; name: string; description: string }>;
+
+  if (!destinations.length) {
+    return usefulObjectRecommendations.length ? usefulObjectRecommendations : normalizedItems;
+  }
+
+  const normalizedDestinations = destinations.map((destination) => normalizeDestination(destination));
+  const destinationScopedRecommendations = normalizedDestinations.flatMap((destination) => {
+    const matched = usefulObjectRecommendations.filter((item) =>
+      item.destination ? areSameDestination(item.destination, destination) : false
+    );
+
+    return matched.length ? matched.slice(0, 2) : getFallbackFoodRecommendations(destination);
+  });
+
+  return destinationScopedRecommendations;
 };
 
 const normalizePlacesToVisit = (value: unknown) => {
@@ -817,6 +935,8 @@ CRITICAL RULES:
 - Give each destination a meaningful summary and at least 3 useful highlights
 - Include at least 2-3 placesToVisit items for EVERY destination
 - Include at least 1-2 foodRecommendations items for EVERY destination when possible
+- Do not use generic food labels like "Local cuisine"
+- Food recommendations must be actual dishes, snacks, sweets, thalis, or meaningful local meal suggestions for each destination
 - Every itinerary item must include: day, phaseType, phaseTitle, destination, morning, afternoon, evening, localTravelTip
 - phaseType must be either "destination" or "travel"
 - The travel phase must mention approximate distance and practical travel mode guidance
@@ -1171,7 +1291,7 @@ ${extractJsonCandidate(aiText)}
         ),
         placesToVisit: normalizedPlacesToVisit,
         hotels: buildHotelOptions(destinations, hotelCategory, priceRange),
-        foodRecommendations: normalizeRecommendationList(aiTrip.foodRecommendations),
+        foodRecommendations: normalizeRecommendationList(aiTrip.foodRecommendations, destinations),
         travelTips: normalizeTravelTips(aiTrip.travelTips),
         estimatedBudget: {
           perDay: `Rs ${Math.round(perDayCost)}`,
@@ -1308,6 +1428,88 @@ export const getTripById = async (req: any, res: Response) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch trip",
+    });
+  }
+};
+
+/* =========================================================
+   SHARE TRIP
+========================================================= */
+export const shareTrip = async (req: any, res: Response) => {
+  try {
+    const trip = await Trip.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: "Trip not found",
+      });
+    }
+
+    if (!trip.shareSlug) {
+      trip.shareSlug = buildShareSlug(trip);
+    }
+
+    trip.isPublicShared = true;
+    trip.sharedAt = new Date();
+    await trip.save();
+
+    return res.status(200).json({
+      success: true,
+      shareSlug: trip.shareSlug,
+    });
+  } catch (error) {
+    console.error("SHARE TRIP ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to create share link",
+    });
+  }
+};
+
+/* =========================================================
+   GET PUBLIC TRIP
+========================================================= */
+export const getPublicTripBySlug = async (req: Request, res: Response) => {
+  try {
+    const trip = await Trip.findOne({
+      shareSlug: req.params.slug,
+      isPublicShared: true,
+    });
+
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: "Shared trip not found",
+      });
+    }
+
+    const tripObj = trip.toObject();
+
+    return res.status(200).json({
+      success: true,
+      trip: {
+        destination: tripObj.destination,
+        secondDestination: tripObj.secondDestination,
+        thirdDestination: tripObj.thirdDestination,
+        days: tripObj.days,
+        budgetType: tripObj.budgetType,
+        travelers: tripObj.travelers,
+        adults: tripObj.adults,
+        children: tripObj.children,
+        travelerDetails: tripObj.travelerDetails,
+        createdAt: tripObj.createdAt,
+        tripData: sanitizeTripData(tripObj.tripData),
+      },
+    });
+  } catch (error) {
+    console.error("GET PUBLIC TRIP ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch shared trip",
     });
   }
 };

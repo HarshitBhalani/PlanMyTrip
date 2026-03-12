@@ -59,6 +59,21 @@ const TripSchema = new Schema(
       },
     },
 
+    isPublicShared: {
+      type: Boolean,
+      default: false,
+    },
+
+    shareSlug: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+
+    sharedAt: {
+      type: Date,
+    },
+
     tripData: {
       type: Schema.Types.Mixed, // stores full AI JSON
       required: true,
