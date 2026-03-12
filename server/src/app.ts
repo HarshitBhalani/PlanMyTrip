@@ -9,6 +9,7 @@ import userRoutes from "./routes/user.routes";
 dotenv.config();
 
 const app = express();
+app.set("trust proxy", 1);
 
 /* ✅ BODY PARSERS (MUST BE FIRST) */
 app.use(express.json());
