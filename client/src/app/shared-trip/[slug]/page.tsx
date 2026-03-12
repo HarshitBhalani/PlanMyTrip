@@ -1,9 +1,3 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { apiRequest } from "../../lib/api";
-
 const ordinalLabel = (index: number) => {
   const labels = ["1ST", "2ND", "3RD", "4TH", "5TH"];
   return labels[index] ?? `${index + 1}TH`;
@@ -29,41 +23,46 @@ const formatSavedAt = (value?: string) => {
   });
 };
 
-export default function SharedTripPage() {
-  const params = useParams<{ slug: string }>();
-  const [trip, setTrip] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+const getApiUrl = () => {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
-  useEffect(() => {
-    const loadTrip = async () => {
-      try {
-        setLoading(true);
-        const response = await apiRequest(`/api/trip/public/${params.slug}`, "GET");
+  if (!apiUrl) {
+    throw new Error("API is not configured");
+  }
 
-        if (!response.success) {
-          throw new Error(response.message || "Shared trip not found");
-        }
+  return apiUrl;
+};
 
-        setTrip(response.trip);
-      } catch (err: any) {
-        setError(err?.message || "Shared trip not found");
-      } finally {
-        setLoading(false);
-      }
-    };
+async function getSharedTrip(slug: string) {
+  const response = await fetch(`${getApiUrl()}/api/trip/public/${slug}`, {
+    cache: "no-store",
+  });
 
-    if (params.slug) {
-      loadTrip();
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok || !payload?.success) {
+    return null;
+  }
+
+  return payload.trip;
+}
+
+export default async function SharedTripPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  let trip: any = null;
+  let error = "";
+
+  try {
+    trip = await getSharedTrip(slug);
+    if (!trip) {
+      error = "Shared trip not found";
     }
-  }, [params.slug]);
-
-  if (loading) {
-    return (
-      <div className="max-w-6xl mx-auto px-4 py-10">
-        <p className="text-gray-600">Loading shared trip...</p>
-      </div>
-    );
+  } catch {
+    error = "Unable to load shared trip right now";
   }
 
   if (error || !trip) {
