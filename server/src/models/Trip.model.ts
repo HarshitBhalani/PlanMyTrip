@@ -17,6 +17,10 @@ const TripSchema = new Schema(
       type: String,
     },
 
+    thirdDestination: {
+      type: String,
+    },
+
     days: {
       type: Number,
       required: true,
@@ -30,6 +34,29 @@ const TripSchema = new Schema(
     travelers: {
       type: String,
       required: true,
+    },
+
+    adults: {
+      type: Number,
+    },
+
+    children: {
+      type: Number,
+    },
+
+    travelerDetails: {
+      adults: {
+        type: Number,
+      },
+      children: {
+        type: Number,
+      },
+      totalMembers: {
+        type: Number,
+      },
+      label: {
+        type: String,
+      },
     },
 
     tripData: {

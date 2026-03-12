@@ -12,6 +12,13 @@ import {
   TravelEstimate,
 } from "../utils/distance";
 
+type TravelerDetails = {
+  adults: number;
+  children: number;
+  totalMembers: number;
+  label: string;
+};
+
 const sanitizeTripData = (tripData: any) => {
   if (!tripData || typeof tripData !== "object") {
     return tripData;
@@ -34,6 +41,167 @@ const sanitizeTripData = (tripData: any) => {
     ...tripData,
     hotels,
   };
+};
+
+const getTravelerDetails = (
+  travelers: string,
+  adultsInput?: number,
+  childrenInput?: number
+): TravelerDetails => {
+  if (travelers === "solo") {
+    return {
+      adults: 1,
+      children: 0,
+      totalMembers: 1,
+      label: "Solo, 1 member",
+    };
+  }
+
+  if (travelers === "couple") {
+    return {
+      adults: 2,
+      children: 0,
+      totalMembers: 2,
+      label: "Couple, 2 members",
+    };
+  }
+
+  const adults = Math.max(1, Math.floor(Number(adultsInput) || 0));
+  const children = Math.max(0, Math.floor(Number(childrenInput) || 0));
+  const totalMembers = adults + children;
+  const groupLabel = travelers === "family" ? "Family" : "Friends";
+
+  return {
+    adults,
+    children,
+    totalMembers,
+    label: `${groupLabel}, ${totalMembers} member${totalMembers === 1 ? "" : "s"}`,
+  };
+};
+
+const getDestinationCostFactor = (destination: string) => {
+  const normalized = normalizeDestination(destination).toLowerCase();
+
+  if (
+    /mumbai|delhi|bengaluru|bangalore|goa|jaipur|udaipur|manali|shimla|kashmir|leh|andaman|kerala|pondicherry|dubai/.test(
+      normalized
+    )
+  ) {
+    return 1.18;
+  }
+
+  if (
+    /dwarka|somnath|nageshwar|trimbakeshwar|shirdi|bhimashankar|ujjain|varanasi|haridwar|rishikesh|tirupati|ayodhya|nashik/.test(
+      normalized
+    )
+  ) {
+    return 0.94;
+  }
+
+  return 1;
+};
+
+const getBudgetEstimate = (
+  budgetType: string,
+  travelerDetails: TravelerDetails,
+  totalDays: number,
+  destinations: string[],
+  dayPlan: number[],
+  travelEstimates: Array<TravelEstimate | null>
+) => {
+  const perPersonBudget = {
+    cheap: { adult: 1500, child: 900 },
+    moderate: { adult: 3500, child: 2200 },
+    luxury: { adult: 8000, child: 5000 },
+  }[budgetType] || { adult: 3500, child: 2200 };
+
+  const transportOverheadPerDay =
+    travelerDetails.totalMembers >= 6 ? 400 : travelerDetails.totalMembers >= 4 ? 250 : 0;
+  const effectiveGuests = travelerDetails.adults + travelerDetails.children * 0.5;
+  const estimatedRooms = Math.max(1, Math.ceil(effectiveGuests / 2));
+  const basePerDayCost =
+    travelerDetails.adults * perPersonBudget.adult +
+    travelerDetails.children * perPersonBudget.child +
+    estimatedRooms * transportOverheadPerDay;
+  const destinationWeightedStayCost = destinations.reduce((total, destination, index) => {
+    const allocatedDays = dayPlan[index] || 1;
+    const destinationFactor = getDestinationCostFactor(destination);
+
+    return total + basePerDayCost * destinationFactor * allocatedDays;
+  }, 0);
+  const travelLegCost = travelEstimates.reduce((total, estimate) => {
+    if (!estimate) {
+      return total + Math.max(1200, travelerDetails.totalMembers * 450);
+    }
+
+    const roadCostPerKm =
+      budgetType === "luxury" ? 18 : budgetType === "cheap" ? 8 : 12;
+    const sharedTransferFloor =
+      budgetType === "luxury" ? 4000 : budgetType === "cheap" ? 1200 : 2200;
+    const distanceDrivenCost = estimate.distanceKm * roadCostPerKm;
+    const groupTransferCost =
+      travelerDetails.totalMembers >= 6
+        ? distanceDrivenCost + travelerDetails.totalMembers * 180
+        : distanceDrivenCost + travelerDetails.totalMembers * 110;
+
+    return total + Math.max(sharedTransferFloor, Math.round(groupTransferCost));
+  }, 0);
+  const totalCost = Math.round(destinationWeightedStayCost + travelLegCost);
+  const perDayCost = Math.round(totalCost / Math.max(totalDays, 1));
+
+  return {
+    perDayCost,
+    totalCost,
+    estimatedRooms,
+    travelLegCost,
+    destinationWeightedStayCost: Math.round(destinationWeightedStayCost),
+  };
+};
+
+const extractJsonCandidate = (value: string) => {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  const withoutCodeFence = trimmed
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  const firstBrace = withoutCodeFence.indexOf("{");
+  const lastBrace = withoutCodeFence.lastIndexOf("}");
+
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return withoutCodeFence.slice(firstBrace, lastBrace + 1);
+  }
+
+  return withoutCodeFence;
+};
+
+const parseAiJson = (value: string) => {
+  const directCandidate = extractJsonCandidate(value);
+
+  if (!directCandidate) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(directCandidate);
+  } catch {
+    const repairedCandidate = directCandidate
+      .replace(/,\s*([}\]])/g, "$1")
+      .replace(/\u0000/g, "")
+      .trim();
+
+    try {
+      return JSON.parse(repairedCandidate);
+    } catch {
+      return null;
+    }
+  }
 };
 
 const normalizeHighlights = (value: unknown) => {
@@ -118,6 +286,27 @@ const normalizePlacesToVisit = (value: unknown) => {
     .filter(Boolean);
 };
 
+const groupItemsByDestination = (
+  items: Array<{ destination?: string; name?: string; description?: string } | null>,
+  destinations: string[]
+) => {
+  return destinations.reduce<Record<string, string[]>>((accumulator, destination) => {
+    accumulator[destination] = items
+      .filter((item): item is { destination?: string; name?: string; description?: string } => {
+        if (!item || typeof item.destination !== "string") {
+          return false;
+        }
+
+        return item.destination.trim().toLowerCase() === destination.toLowerCase();
+      })
+      .map((item) => item.name || item.description || "")
+      .filter(Boolean)
+      .slice(0, 4);
+
+    return accumulator;
+  }, {});
+};
+
 const normalizeTravelTips = (value: unknown) => {
   if (!Array.isArray(value)) {
     return [];
@@ -126,6 +315,295 @@ const normalizeTravelTips = (value: unknown) => {
   return value
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter(Boolean);
+};
+
+const buildDestinationDayPlan = (days: number, destinationCount: number) => {
+  const safeDestinationCount = Math.max(destinationCount, 1);
+  const baseDays = Math.floor(days / safeDestinationCount);
+  const remainder = days % safeDestinationCount;
+
+  return Array.from({ length: safeDestinationCount }, (_, index) =>
+    baseDays + (index < remainder ? 1 : 0)
+  );
+};
+
+const createFallbackDestinationDay = (destination: string, localDayNumber: number) => ({
+  phaseType: "destination" as const,
+  phaseTitle: `${destination} - Day ${localDayNumber}`,
+  destination,
+  morning: `Start the day with the main highlights of ${destination} at a comfortable pace.`,
+  afternoon: `Continue sightseeing around ${destination} with family-friendly local attractions.`,
+  evening: `Enjoy local food, a relaxed walk, and rest for the next day.`,
+  localTravelTip: `Keep local transport flexible and leave buffer time around major attractions in ${destination}.`,
+});
+
+type TravelSegmentContext = {
+  durationMinutes?: number;
+  durationText?: string;
+  distanceText?: string;
+} | null;
+
+const mentionsDestination = (value: string, destination: string) => {
+  const normalizedValue = value.trim().toLowerCase();
+  const normalizedDestination = normalizeDestination(destination).toLowerCase();
+
+  return Boolean(normalizedDestination) && normalizedValue.includes(normalizedDestination);
+};
+
+const buildDestinationKeywordMap = (
+  destinations: string[],
+  groupedPlaces: Record<string, string[]>
+) => {
+  return destinations.reduce<Record<string, string[]>>((accumulator, destination) => {
+    const normalizedDestination = normalizeDestination(destination).toLowerCase();
+    const placeKeywords = (groupedPlaces[destination] || [])
+      .map((place) => place.trim().toLowerCase())
+      .filter((place) => place.length >= 3);
+
+    accumulator[destination] = Array.from(
+      new Set([normalizedDestination, ...placeKeywords].filter(Boolean))
+    );
+
+    return accumulator;
+  }, {});
+};
+
+const sanitizeTextForDestinations = ({
+  text,
+  allowedDestinations,
+  allDestinations,
+  destinationKeywordMap,
+  fallbackText,
+}: {
+  text: string;
+  allowedDestinations: string[];
+  allDestinations: string[];
+  destinationKeywordMap: Record<string, string[]>;
+  fallbackText: string;
+}) => {
+  const trimmedText = text.trim();
+
+  if (!trimmedText) {
+    return fallbackText;
+  }
+
+  const hasBlockedDestinationMention = allDestinations.some(
+    (destination) =>
+      !allowedDestinations.some((allowedDestination) =>
+        areSameDestination(allowedDestination, destination)
+      ) &&
+      (mentionsDestination(trimmedText, destination) ||
+        (destinationKeywordMap[destination] || []).some((keyword) =>
+          trimmedText.toLowerCase().includes(keyword)
+        ))
+  );
+
+  if (hasBlockedDestinationMention) {
+    return fallbackText;
+  }
+
+  return trimmedText;
+};
+
+const buildTravelDayEntry = ({
+  fromDestination,
+  toDestination,
+  allDestinations,
+  destinationKeywordMap,
+  segment,
+  currentDay,
+  nextDay,
+}: {
+  fromDestination: string;
+  toDestination: string;
+  allDestinations: string[];
+  destinationKeywordMap: Record<string, string[]>;
+  segment: TravelSegmentContext;
+  currentDay?: ReturnType<typeof normalizeItinerary>[number];
+  nextDay?: ReturnType<typeof normalizeItinerary>[number];
+}) => {
+  const durationMinutes = segment?.durationMinutes || 0;
+  const distanceText = segment?.distanceText || "distance varies by route";
+  const durationText = segment?.durationText || "travel time varies by route";
+
+  if (durationMinutes > 0 && durationMinutes <= 90) {
+    return {
+      phaseType: "travel" as const,
+      phaseTitle: `Travel to ${toDestination}`,
+      destination: toDestination,
+      morning: sanitizeTextForDestinations({
+        text:
+          currentDay?.morning ||
+          `Finish checkout and leave ${fromDestination} after a light morning visit.`,
+        allowedDestinations: [fromDestination],
+        allDestinations,
+        destinationKeywordMap,
+        fallbackText: `Finish checkout and cover a few last highlights around ${fromDestination} before departure.`,
+      }),
+      afternoon: sanitizeTextForDestinations({
+        text:
+          nextDay?.afternoon ||
+          `Reach ${toDestination} after roughly ${durationText} and start local sightseeing the same afternoon.`,
+        allowedDestinations: [toDestination],
+        allDestinations,
+        destinationKeywordMap,
+        fallbackText: `Reach ${toDestination} after roughly ${durationText} and begin nearby sightseeing after check-in.`,
+      }),
+      evening: sanitizeTextForDestinations({
+        text:
+          nextDay?.evening ||
+          `Keep the evening active in ${toDestination} with a short market, temple, or local food visit.`,
+        allowedDestinations: [toDestination],
+        allDestinations,
+        destinationKeywordMap,
+        fallbackText: `Spend the evening in ${toDestination} with a short local visit and relaxed dinner.`,
+      }),
+      localTravelTip: `This is a short transfer of about ${distanceText}. Keep bags light and continue sightseeing after arrival.`,
+    };
+  }
+
+  if (durationMinutes >= 360) {
+    return {
+      phaseType: "travel" as const,
+      phaseTitle: `Travel to ${toDestination}`,
+      destination: toDestination,
+      morning: `Check out from ${fromDestination} and begin the long transfer to ${toDestination}.`,
+      afternoon: `Most of the day stays reserved for travel covering about ${distanceText} in roughly ${durationText}.`,
+      evening: `Arrive in ${toDestination}, check in, and keep the evening light for recovery.`,
+      localTravelTip: `This is a long travel leg. Treat it as a transfer day and avoid heavy sightseeing plans.`,
+    };
+  }
+
+  return {
+    phaseType: "travel" as const,
+    phaseTitle: `Travel to ${toDestination}`,
+    destination: toDestination,
+    morning: sanitizeTextForDestinations({
+      text:
+        currentDay?.morning ||
+        `Wrap up key visits in ${fromDestination} before departure.`,
+      allowedDestinations: [fromDestination],
+      allDestinations,
+      destinationKeywordMap,
+      fallbackText: `Wrap up key visits in ${fromDestination} before departure.`,
+    }),
+    afternoon: `Travel from ${fromDestination} to ${toDestination} for about ${durationText} covering approximately ${distanceText}.`,
+    evening: sanitizeTextForDestinations({
+      text:
+        nextDay?.evening ||
+        `Reach ${toDestination}, check in, and do a light nearby visit if time allows.`,
+      allowedDestinations: [toDestination],
+      allDestinations,
+      destinationKeywordMap,
+      fallbackText: `Reach ${toDestination}, check in, and keep the evening limited to a nearby local visit if time allows.`,
+    }),
+    localTravelTip: `Plan a balanced transfer day with only light sightseeing around arrival in ${toDestination}.`,
+  };
+};
+
+const buildStructuredItinerary = ({
+  itinerary,
+  destinations,
+  travelSegments,
+  dayPlan,
+  groupedPlaces,
+}: {
+  itinerary: ReturnType<typeof normalizeItinerary>;
+  destinations: string[];
+  travelSegments: TravelSegmentContext[];
+  dayPlan: number[];
+  groupedPlaces: Record<string, string[]>;
+}) => {
+  const destinationKeywordMap = buildDestinationKeywordMap(destinations, groupedPlaces);
+  const destinationDays = destinations.reduce<Record<string, ReturnType<typeof normalizeItinerary>>>(
+    (accumulator, destination) => {
+      accumulator[destination] = itinerary.filter(
+        (item) =>
+          item.phaseType === "destination" &&
+          item.destination.trim().toLowerCase() === destination.toLowerCase()
+      );
+      return accumulator;
+    },
+    {}
+  );
+
+  const result: ReturnType<typeof normalizeItinerary> = [];
+  let absoluteDay = 1;
+
+  destinations.forEach((destination, destinationIndex) => {
+    const allocatedDays = dayPlan[destinationIndex] || 1;
+    const hasNextDestination = destinationIndex < destinations.length - 1;
+    const nextDestination = hasNextDestination ? destinations[destinationIndex + 1] : "";
+    const destinationPool = destinationDays[destination] || [];
+    const nextPool = nextDestination ? destinationDays[nextDestination] || [] : [];
+
+    for (let localDay = 0; localDay < allocatedDays; localDay += 1) {
+      const isTransitionDay = hasNextDestination && localDay === allocatedDays - 1;
+
+      if (isTransitionDay) {
+        const transitionEntry = buildTravelDayEntry({
+          fromDestination: destination,
+          toDestination: nextDestination,
+          allDestinations: destinations,
+          destinationKeywordMap,
+          segment: travelSegments[destinationIndex] || null,
+          currentDay:
+            destinationPool[Math.min(localDay, destinationPool.length - 1)] ||
+            undefined,
+          nextDay: nextPool[0] || undefined,
+        });
+
+        result.push({
+          day: absoluteDay,
+          ...transitionEntry,
+        });
+      } else {
+        const sourceDay =
+          destinationPool[Math.min(localDay, destinationPool.length - 1)] ||
+          createFallbackDestinationDay(destination, localDay + 1);
+
+        result.push({
+          day: absoluteDay,
+          phaseType: "destination",
+          phaseTitle:
+            sourceDay.phaseTitle || `${destination} - Day ${localDay + 1}`,
+          destination,
+          morning: sanitizeTextForDestinations({
+            text: sourceDay.morning,
+            allowedDestinations: [destination],
+            allDestinations: destinations,
+            destinationKeywordMap,
+            fallbackText: `Start the day exploring key attractions in ${destination}.`,
+          }),
+          afternoon: sanitizeTextForDestinations({
+            text: sourceDay.afternoon,
+            allowedDestinations: [destination],
+            allDestinations: destinations,
+            destinationKeywordMap,
+            fallbackText: `Spend the afternoon visiting nearby highlights around ${destination}.`,
+          }),
+          evening: sanitizeTextForDestinations({
+            text: sourceDay.evening,
+            allowedDestinations: [destination],
+            allDestinations: destinations,
+            destinationKeywordMap,
+            fallbackText: `Enjoy a relaxed evening in ${destination} with local food and rest.`,
+          }),
+          localTravelTip: sanitizeTextForDestinations({
+            text: sourceDay.localTravelTip,
+            allowedDestinations: [destination],
+            allDestinations: destinations,
+            destinationKeywordMap,
+            fallbackText: `Keep local travel flexible and leave enough buffer time in ${destination}.`,
+          }),
+        });
+      }
+
+      absoluteDay += 1;
+    }
+  });
+
+  return result;
 };
 
 const normalizeItineraryLength = (
@@ -161,34 +639,36 @@ const normalizeItineraryLength = (
 
 const normalizeDestinations = (
   value: unknown,
-  fallbackDestinations: string[]
+  fallbackDestinations: string[],
+  dayPlan: number[],
+  groupedPlaces: Record<string, string[]>
 ) => {
-  if (!Array.isArray(value) || !value.length) {
-    return fallbackDestinations.map((destination) => ({
-      name: destination,
-      stayDays: "",
-      summary: "",
-      highlights: [],
-    }));
-  }
+  const normalizedInput = Array.isArray(value) ? value : [];
 
-  return value
-    .map((item: any, index) => {
-      const fallbackName = fallbackDestinations[index] || "";
+  return fallbackDestinations.map((fallbackName, index) => {
+    const matchingItem = normalizedInput.find(
+      (item: any) =>
+        typeof item?.name === "string" &&
+        item.name.trim().toLowerCase() === fallbackName.toLowerCase()
+    );
+    const indexedItem = normalizedInput[index];
+    const item = matchingItem || indexedItem || {};
+    const highlights = normalizeHighlights(item?.highlights);
+    const fallbackHighlights = groupedPlaces[fallbackName] || [];
 
-      return {
-        name:
-          typeof item?.name === "string" && item.name.trim()
-            ? item.name.trim()
-            : fallbackName,
-        stayDays:
-          typeof item?.stayDays === "string" ? item.stayDays.trim() : "",
-        summary:
-          typeof item?.summary === "string" ? item.summary.trim() : "",
-        highlights: normalizeHighlights(item?.highlights),
-      };
-    })
-    .filter((item) => item.name);
+    return {
+      name: fallbackName,
+      stayDays:
+        typeof item?.stayDays === "string" && item.stayDays.trim()
+          ? item.stayDays.trim()
+          : `${dayPlan[index] || 1} day${dayPlan[index] === 1 ? "" : "s"}`,
+      summary:
+        typeof item?.summary === "string" && item.summary.trim()
+          ? item.summary.trim()
+          : `Spend ${dayPlan[index] || 1} day${dayPlan[index] === 1 ? "" : "s"} exploring ${fallbackName}.`,
+      highlights: (highlights.length ? highlights : fallbackHighlights).slice(0, 4),
+    };
+  });
 };
 
 const normalizeTravelSegment = (
@@ -246,31 +726,29 @@ const normalizeTravelSegment = (
   };
 };
 
-const buildBalancedDayPlan = (days: number) => {
-  if (days <= 2) {
-    return {
-      firstDestinationDays: 1,
-      secondDestinationDays: Math.max(days - 1, 1),
-    };
-  }
+const normalizeTravelSegments = (
+  value: unknown,
+  fallbackTravelEstimates: Array<TravelEstimate | null>
+) => {
+  const inputSegments = Array.isArray(value) ? value : [];
 
-  const firstDestinationDays = Math.max(2, Math.floor(days / 2));
-  return {
-    firstDestinationDays,
-    secondDestinationDays: Math.max(days - firstDestinationDays, 1),
-  };
+  return fallbackTravelEstimates
+    .map((estimate, index) =>
+      normalizeTravelSegment(inputSegments[index] || estimate, estimate)
+    )
+    .filter(Boolean);
 };
 
 const buildTravelRecommendations = (
-  destination: string,
-  secondDestination: string,
+  fromDestination: string,
+  toDestination: string,
   travelEstimate: TravelEstimate | null
 ) => {
   const distanceText = travelEstimate?.distanceText || "distance varies by route";
 
   return {
-    recommendedBus: `Road transfer or intercity bus from ${destination} to ${secondDestination} for approximately ${distanceText}.`,
-    recommendedRailway: `Check the nearest major railway stations for ${destination} and ${secondDestination}; rail may require a short road transfer at one or both ends.`,
+    recommendedBus: `Road transfer or intercity bus from ${fromDestination} to ${toDestination} for approximately ${distanceText}.`,
+    recommendedRailway: `Check the nearest major railway stations for ${fromDestination} and ${toDestination}; rail may require a short road transfer at one or both ends.`,
     recommendedAirport: `Air travel is only worth considering if nearby regional airports save time; compare total airport transfer time before choosing flights.`,
   };
 };
@@ -290,21 +768,33 @@ const buildHotelOptions = (
   }));
 
 const buildPrompt = ({
-  destination,
-  secondDestination,
+  destinations,
   days,
   travelers,
-  travelEstimate,
+  travelerDetails,
+  travelEstimates,
 }: {
-  destination: string;
-  secondDestination?: string;
+  destinations: string[];
   days: number;
   travelers: string;
-  travelEstimate: TravelEstimate | null;
+  travelerDetails: TravelerDetails;
+  travelEstimates: Array<TravelEstimate | null>;
 }) => {
-  const balancedDayPlan = secondDestination
-    ? buildBalancedDayPlan(days)
-    : null;
+  const dayPlan = buildDestinationDayPlan(days, destinations.length);
+  const destinationList = destinations
+    .map((destination, index) => `- Destination ${index + 1}: ${destination} (${dayPlan[index]} day allocation)`)
+    .join("\n");
+  const travelLegList =
+    travelEstimates.length > 0
+      ? travelEstimates
+          .map(
+            (estimate, index) =>
+              `- Travel ${index + 1}: ${destinations[index]} -> ${destinations[index + 1]} | Distance: ${
+                estimate?.distanceText || "Unavailable"
+              } | Duration: ${estimate?.durationText || "Unavailable"}`
+          )
+          .join("\n")
+      : "- Travel legs: None";
 
   return `
 You are a PROFESSIONAL INDIAN TRAVEL PLANNER AI.
@@ -318,24 +808,35 @@ CRITICAL RULES:
 - No markdown
 - No explanations
 - The itinerary day count must be EXACTLY ${days}
-- If there are two destinations, create ONE combined ${days}-day itinerary
-- If there are two destinations, distribute the ${days} days intelligently across both destinations
-- If there are two destinations, include a clear travel phase between the two destination phases
-- For two destinations, keep the split balanced and practical for families and moderate budgets
-- For two destinations, plan roughly ${balancedDayPlan?.firstDestinationDays || ""} days in ${destination}, then one travel transition, then ${balancedDayPlan?.secondDestinationDays || ""} days in ${secondDestination || ""}
-- The second destination must receive the same recommendation quality as the first destination
+- If there are multiple destinations, create ONE combined ${days}-day itinerary
+- Distribute the ${days} days across all destinations while keeping the split balanced and practical for families and moderate budgets
+- Use these destination day targets as guidance: ${dayPlan.join(", ")}
+- Include a clear travel phase between each destination phase
+- Destination 2 and Destination 3 must receive the same recommendation quality as Destination 1
+- Return one destinations entry for EVERY requested destination in the SAME order
+- Give each destination a meaningful summary and at least 3 useful highlights
+- Include at least 2-3 placesToVisit items for EVERY destination
+- Include at least 1-2 foodRecommendations items for EVERY destination when possible
 - Every itinerary item must include: day, phaseType, phaseTitle, destination, morning, afternoon, evening, localTravelTip
 - phaseType must be either "destination" or "travel"
 - The travel phase must mention approximate distance and practical travel mode guidance
+- If a travel leg is short, keep the same day useful with sightseeing after arrival
+- If a travel leg is 6 hours or longer, treat it as mostly a full transfer day
+- Never mention attractions, temple visits, aarti, meals, or sightseeing for a later destination before the itinerary has reached that destination
+- On each day, activities must belong only to the current destination or the immediate arrival destination for that travel leg
 - Do not create extra days beyond the total count
+- Do not skip any destination
+- Do not give all days to the first destination
 
 Trip Input:
-- Destination 1: ${destination}
-- Destination 2: ${secondDestination || "None"}
+- Destination Count: ${destinations.length}
+- Destinations:
+${destinationList}
 - Total Days: ${days}
 - Travelers: ${travelers}
-- Travel Distance: ${travelEstimate?.distanceText || "Unavailable"}
-- Travel Duration: ${travelEstimate?.durationText || "Unavailable"}
+- Party Details: ${travelerDetails.label} (${travelerDetails.adults} adults, ${travelerDetails.children} children)
+- Travel Legs:
+${travelLegList}
 
 Return JSON EXACTLY in this format:
 {
@@ -358,18 +859,20 @@ Return JSON EXACTLY in this format:
       "highlights": []
     }
   ],
-  "travelSegment": {
-    "from": "",
-    "to": "",
-    "distanceKm": 0,
-    "distanceText": "",
-    "durationMinutes": 0,
-    "durationText": "",
-    "summary": "",
-    "recommendedBus": "",
-    "recommendedRailway": "",
-    "recommendedAirport": ""
-  },
+  "travelSegments": [
+    {
+      "from": "",
+      "to": "",
+      "distanceKm": 0,
+      "distanceText": "",
+      "durationMinutes": 0,
+      "durationText": "",
+      "summary": "",
+      "recommendedBus": "",
+      "recommendedRailway": "",
+      "recommendedAirport": ""
+    }
+  ],
   "itinerary": [
     {
       "day": 1,
@@ -463,62 +966,71 @@ export const previewTripDistance = async (req: Request, res: Response) => {
 ========================================================= */
 export const generateTrip = async (req: any, res: Response) => {
   try {
-    const { destination, secondDestination, days, budgetType, travelers } = req.body;
-    const cleanedDestination = normalizeDestination(destination);
-    const cleanedSecondDestination =
+    const {
+      destination,
+      secondDestination,
+      thirdDestination,
+      days,
+      budgetType,
+      travelers,
+      adults,
+      children,
+    } = req.body;
+    const destinations = [
+      normalizeDestination(destination),
       typeof secondDestination === "string" && secondDestination.trim()
         ? normalizeDestination(secondDestination)
-        : "";
-    const hasSecondDestination = Boolean(cleanedSecondDestination);
+        : "",
+      typeof thirdDestination === "string" && thirdDestination.trim()
+        ? normalizeDestination(thirdDestination)
+        : "",
+    ].filter(Boolean);
 
-    if (
-      hasSecondDestination &&
-      areSameDestination(cleanedDestination, cleanedSecondDestination)
-    ) {
+    if (new Set(destinations.map((item) => item.toLowerCase())).size !== destinations.length) {
       return res.status(400).json({
         success: false,
-        message: "Second destination cannot be the same as the first destination",
+        message: "Destination already added",
       });
     }
+
+    const hasMultipleDestinations = destinations.length > 1;
 
     const preferences = await UserPreference.findOne({
       user: req.user._id,
     });
 
     const finalBudget = preferences?.budgetRange || budgetType;
-
-    const baseCostPerDay: Record<string, number> = {
-      cheap: 1500,
-      moderate: 3500,
-      luxury: 8000,
-    };
-
-    const travelerMultiplier: Record<string, number> = {
-      solo: 1,
-      couple: 1.8,
-      friends: 2.5,
-      family: 3,
-    };
-
-    const perDayCost =
-      (baseCostPerDay[finalBudget] || 3500) *
-      (travelerMultiplier[travelers] || 1);
+    const travelerDetails = getTravelerDetails(travelers, Number(adults), Number(children));
 
     const requestedDays = Number(days);
-    const totalCost = Math.round(perDayCost * requestedDays);
-    const travelEstimate = hasSecondDestination
-      ? await estimateTravelBetweenDestinations(
-          cleanedDestination,
-          cleanedSecondDestination
+    const dayPlan = buildDestinationDayPlan(requestedDays, destinations.length);
+    const travelEstimates = hasMultipleDestinations
+      ? await Promise.all(
+          destinations.slice(0, -1).map((currentDestination, index) =>
+            estimateTravelBetweenDestinations(
+              currentDestination,
+              destinations[index + 1]
+            )
+          )
         )
-      : null;
+      : [];
+    const budgetEstimate = getBudgetEstimate(
+      finalBudget,
+      travelerDetails,
+      requestedDays,
+      destinations,
+      dayPlan,
+      travelEstimates
+    );
+    const perDayCost = budgetEstimate.perDayCost;
+    const totalCost = budgetEstimate.totalCost;
 
     const prompt = buildPrompt({
-      destination: cleanedDestination,
-      secondDestination: cleanedSecondDestination || undefined,
+      destinations,
       days: requestedDays,
       travelers,
-      travelEstimate,
+      travelerDetails,
+      travelEstimates,
     });
 
     const aiText = await generateTripWithAI(prompt);
@@ -530,14 +1042,26 @@ export const generateTrip = async (req: any, res: Response) => {
       });
     }
 
-    let aiTrip;
-    try {
-      aiTrip = JSON.parse(aiText);
-    } catch {
+    let aiTrip = parseAiJson(aiText);
+
+    if (!aiTrip) {
+      const repairPrompt = `
+Convert the following content into valid JSON only.
+Do not add markdown.
+Do not add explanation text.
+Return only one valid JSON object.
+
+${extractJsonCandidate(aiText)}
+`;
+
+      const repairedAiText = await generateTripWithAI(repairPrompt);
+      aiTrip = repairedAiText ? parseAiJson(repairedAiText) : null;
+    }
+
+    if (!aiTrip) {
       return res.status(500).json({
         success: false,
-        message: "AI returned invalid JSON",
-        raw: aiText,
+        message: "Trip generation is taking longer than expected. Please try again.",
       });
     }
 
@@ -555,16 +1079,47 @@ export const generateTrip = async (req: any, res: Response) => {
       priceRange = "Rs 7,000 - Rs 12,000";
     }
 
-    const allDestinations = hasSecondDestination
-      ? [cleanedDestination, cleanedSecondDestination]
-      : [cleanedDestination];
-    const travelRecommendations = hasSecondDestination
-      ? buildTravelRecommendations(
-          cleanedDestination,
-          cleanedSecondDestination,
-          travelEstimate
-        )
-      : null;
+    const travelRecommendations = travelEstimates.map((travelEstimate, index) =>
+      buildTravelRecommendations(
+        destinations[index],
+        destinations[index + 1],
+        travelEstimate
+      )
+    );
+    const normalizedTravelSegments = normalizeTravelSegments(
+      aiTrip.travelSegments,
+      travelEstimates
+    ).map((segment, index) => {
+      const fallbackEstimate = travelEstimates[index];
+      const fallbackFrom = destinations[index] || "";
+      const fallbackTo = destinations[index + 1] || "";
+      const baseSegment = segment || fallbackEstimate;
+
+      return {
+        from: baseSegment?.from || fallbackFrom,
+        to: baseSegment?.to || fallbackTo,
+        distanceKm: baseSegment?.distanceKm || 0,
+        distanceText: baseSegment?.distanceText || "",
+        durationMinutes: baseSegment?.durationMinutes || 0,
+        durationText: baseSegment?.durationText || "",
+        summary:
+          typeof (baseSegment as { summary?: string } | null)?.summary === "string"
+            ? ((baseSegment as { summary?: string }).summary || "").trim()
+            : "",
+        recommendedBus: travelRecommendations[index]?.recommendedBus || "",
+        recommendedRailway: travelRecommendations[index]?.recommendedRailway || "",
+        recommendedAirport: travelRecommendations[index]?.recommendedAirport || "",
+      };
+    });
+    const normalizedPlacesToVisit = normalizePlacesToVisit(aiTrip.placesToVisit);
+    const groupedPlaces = groupItemsByDestination(normalizedPlacesToVisit, destinations);
+    const normalizedItinerary = buildStructuredItinerary({
+      itinerary: normalizeItinerary(aiTrip.itinerary),
+      destinations,
+      travelSegments: normalizedTravelSegments,
+      dayPlan,
+      groupedPlaces,
+    });
 
     return res.status(200).json({
       success: true,
@@ -572,9 +1127,7 @@ export const generateTrip = async (req: any, res: Response) => {
         tripTitle:
           typeof aiTrip.tripTitle === "string" && aiTrip.tripTitle.trim()
             ? aiTrip.tripTitle.trim()
-            : hasSecondDestination
-            ? `${cleanedDestination} to ${cleanedSecondDestination} Trip`
-            : `${cleanedDestination} Trip`,
+            : `${destinations.join(" to ")} Trip`,
         overview: {
           bestTimeToVisit:
             typeof aiTrip?.overview?.bestTimeToVisit === "string"
@@ -587,7 +1140,7 @@ export const generateTrip = async (req: any, res: Response) => {
           routeSummary:
             typeof aiTrip?.overview?.routeSummary === "string"
               ? aiTrip.overview.routeSummary.trim()
-              : "",
+              : destinations.join(" -> "),
         },
         transport: {
           railwayStation:
@@ -603,29 +1156,32 @@ export const generateTrip = async (req: any, res: Response) => {
               ? aiTrip.transport.airport.trim()
               : "",
         },
-        destinations: normalizeDestinations(aiTrip.destinations, allDestinations),
-        travelSegment: hasSecondDestination
-          ? {
-              ...travelRecommendations,
-              ...normalizeTravelSegment(aiTrip.travelSegment, travelEstimate),
-            }
-          : null,
-        itinerary: normalizeItineraryLength(
-          normalizeItinerary(aiTrip.itinerary),
-          requestedDays,
-          cleanedSecondDestination || cleanedDestination
+        destinations: normalizeDestinations(
+          aiTrip.destinations,
+          destinations,
+          dayPlan,
+          groupedPlaces
         ),
-        placesToVisit: normalizePlacesToVisit(aiTrip.placesToVisit),
-        hotels: buildHotelOptions(allDestinations, hotelCategory, priceRange),
+        travelSegments: normalizedTravelSegments,
+        travelSegment: normalizedTravelSegments[0] || null,
+        itinerary: normalizeItineraryLength(
+          normalizedItinerary,
+          requestedDays,
+          destinations[destinations.length - 1]
+        ),
+        placesToVisit: normalizedPlacesToVisit,
+        hotels: buildHotelOptions(destinations, hotelCategory, priceRange),
         foodRecommendations: normalizeRecommendationList(aiTrip.foodRecommendations),
         travelTips: normalizeTravelTips(aiTrip.travelTips),
         estimatedBudget: {
           perDay: `Rs ${Math.round(perDayCost)}`,
           total: `Rs ${totalCost}`,
-          note: hasSecondDestination
-            ? `Approximate cost for ${travelers} on a ${finalBudget} budget across ${cleanedDestination} and ${cleanedSecondDestination}`
-            : `Approximate cost for ${travelers} on a ${finalBudget} budget`,
+          note:
+            destinations.length > 1
+              ? `Approximate cost for ${travelerDetails.label} on a ${finalBudget} budget across ${destinations.join(", ")}. This estimate includes member count, destination-wise stay cost, around ${budgetEstimate.estimatedRooms} room${budgetEstimate.estimatedRooms === 1 ? "" : "s"} per night, and about Rs ${budgetEstimate.travelLegCost} for inter-city transfers.`
+              : `Approximate cost for ${travelerDetails.label} on a ${finalBudget} budget in ${destinations[0]}. This estimate includes member count, destination stay cost, and around ${budgetEstimate.estimatedRooms} room${budgetEstimate.estimatedRooms === 1 ? "" : "s"} per night.`,
         },
+        travelerDetails,
       },
     });
   } catch (error) {
@@ -642,7 +1198,18 @@ export const generateTrip = async (req: any, res: Response) => {
 ========================================================= */
 export const saveTrip = async (req: any, res: Response) => {
   try {
-    const { destination, secondDestination, days, budgetType, travelers, tripData } =
+    const {
+      destination,
+      secondDestination,
+      thirdDestination,
+      days,
+      budgetType,
+      travelers,
+      adults,
+      children,
+      travelerDetails,
+      tripData,
+    } =
       req.body;
 
     if (!destination || !days || !budgetType || !travelers || !tripData) {
@@ -658,9 +1225,13 @@ export const saveTrip = async (req: any, res: Response) => {
       user: req.user._id,
       destination,
       secondDestination,
+      thirdDestination,
       days,
       budgetType,
       travelers,
+      adults,
+      children,
+      travelerDetails,
       tripData: sanitizedTripData,
     });
 
@@ -737,6 +1308,61 @@ export const getTripById = async (req: any, res: Response) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch trip",
+    });
+  }
+};
+
+/* =========================================================
+   UPDATE TRIP
+========================================================= */
+export const updateTrip = async (req: any, res: Response) => {
+  try {
+    const { tripData } = req.body;
+
+    if (!tripData || typeof tripData !== "object" || Array.isArray(tripData)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid trip data",
+      });
+    }
+
+    const sanitizedTripData = sanitizeTripData(tripData);
+
+    const trip = await Trip.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        user: req.user._id,
+      },
+      {
+        $set: {
+          tripData: sanitizedTripData,
+        },
+      },
+      {
+        new: true,
+      }
+    );
+
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: "Trip not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Trip updated successfully",
+      trip: {
+        ...trip.toObject(),
+        tripData: sanitizeTripData(trip.tripData),
+      },
+    });
+  } catch (error) {
+    console.error("UPDATE TRIP ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update trip",
     });
   }
 };

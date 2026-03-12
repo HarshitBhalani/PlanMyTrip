@@ -8,7 +8,6 @@ const ALLOWED_BUDGET_TYPES = new Set(["cheap", "moderate", "luxury"]);
 const ALLOWED_TRAVELERS = new Set(["solo", "couple", "friends", "family"]);
 const MAX_GENERATE_TRIP_BODY_BYTES = 10 * 1024;
 const MAX_GENERATE_TRIP_BODY_CHARS = 2000;
-
 export const validateGenerateTripRequest = (
   req: Request,
   res: Response,
@@ -39,7 +38,17 @@ export const validateGenerateTripRequest = (
     });
   }
 
-  const { destination, secondDestination, days, budgetType, travelers } = req.body;
+  const {
+    destination,
+    secondDestination,
+    thirdDestination,
+    days,
+    budgetType,
+    travelers,
+    adults,
+    children,
+  } =
+    req.body;
 
   if (
     days === undefined ||
@@ -85,30 +94,67 @@ export const validateGenerateTripRequest = (
     });
   }
 
-  if (secondDestination !== undefined && secondDestination !== null && secondDestination !== "") {
-    const secondDestinationValidation = validateDestinationName(
-      secondDestination,
+  const parsedAdults = adults === undefined || adults === null || adults === "" ? 0 : Number(adults);
+  const parsedChildren =
+    children === undefined || children === null || children === "" ? 0 : Number(children);
+
+  if ((travelers === "family" || travelers === "friends")) {
+    const minAdults = travelers === "family" ? 4 : 8;
+    const maxAdults = travelers === "family" ? 7 : 15;
+
+    if (!Number.isInteger(parsedAdults) || parsedAdults < minAdults || parsedAdults > maxAdults) {
+      return res.status(400).json({
+        success: false,
+        message: `Adults must be an integer between ${minAdults} and ${maxAdults}`,
+      });
+    }
+
+    if (!Number.isInteger(parsedChildren) || parsedChildren < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Children must be an integer greater than or equal to 0",
+      });
+    }
+  }
+
+  const optionalDestinations = [secondDestination, thirdDestination].filter(
+    (value) => value !== undefined && value !== null && value !== ""
+  );
+
+  const validatedDestinations = [primaryDestinationValidation.cleanedValue!];
+
+  for (const optionalDestination of optionalDestinations) {
+    const validation = validateDestinationName(
+      optionalDestination,
       "Please enter a destination"
     );
 
-    if (!secondDestinationValidation.isValid) {
+    if (!validation.isValid) {
       return res.status(400).json({
         success: false,
-        message: secondDestinationValidation.message,
+        message: validation.message,
       });
     }
 
     if (
-      areSameDestination(
-        primaryDestinationValidation.cleanedValue!,
-        secondDestinationValidation.cleanedValue!
+      validatedDestinations.some((destinationName) =>
+        areSameDestination(destinationName, validation.cleanedValue!)
       )
     ) {
       return res.status(400).json({
         success: false,
-        message: "Second destination cannot be the same as the first destination",
+        message: "Destination already added",
       });
     }
+
+    validatedDestinations.push(validation.cleanedValue!);
+  }
+
+  if (thirdDestination && !secondDestination) {
+    return res.status(400).json({
+      success: false,
+      message: "Add the second destination before adding a third one",
+    });
   }
 
   return next();

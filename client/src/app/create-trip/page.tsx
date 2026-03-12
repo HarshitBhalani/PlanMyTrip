@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PlusCircle, X } from "lucide-react";
+import { Loader2, PlusCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest } from "../lib/api";
 import {
@@ -53,6 +53,7 @@ type TripResult = {
     summary?: string;
     highlights?: string[];
   }>;
+  travelSegments?: TravelPreview[];
   travelSegment?: TravelPreview | null;
   itinerary?: TripDay[];
   hotels?: Array<{
@@ -65,6 +66,48 @@ type TripResult = {
     perDay?: string;
     total?: string;
     note?: string;
+  };
+  travelerDetails?: {
+    adults: number;
+    children: number;
+    totalMembers: number;
+    label: string;
+  };
+};
+
+const getTravelerConfig = (
+  travelers: string,
+  adults: number,
+  children: number
+) => {
+  if (travelers === "solo") {
+    return {
+      adults: 1,
+      children: 0,
+      totalMembers: 1,
+      label: "Solo, 1 member",
+    };
+  }
+
+  if (travelers === "couple") {
+    return {
+      adults: 2,
+      children: 0,
+      totalMembers: 2,
+      label: "Couple, 2 members",
+    };
+  }
+
+  const safeAdults = Math.max(0, adults);
+  const safeChildren = Math.max(0, children);
+  const totalMembers = safeAdults + safeChildren;
+  const baseLabel = travelers === "family" ? "Family" : "Friends";
+
+  return {
+    adults: safeAdults,
+    children: safeChildren,
+    totalMembers,
+    label: `${baseLabel}, ${totalMembers} member${totalMembers === 1 ? "" : "s"}`,
   };
 };
 
@@ -141,9 +184,13 @@ export default function CreateTripPage() {
   const [destination, setDestination] = useState("");
   const [showSecondDestination, setShowSecondDestination] = useState(false);
   const [secondDestination, setSecondDestination] = useState("");
+  const [showThirdDestination, setShowThirdDestination] = useState(false);
+  const [thirdDestination, setThirdDestination] = useState("");
   const [days, setDays] = useState<number | "">("");
   const [budgetType, setBudgetType] = useState("moderate");
   const [travelers, setTravelers] = useState("friends");
+  const [adults, setAdults] = useState(2);
+  const [children, setChildren] = useState(0);
   const [loading, setLoading] = useState(false);
   const [tripResult, setTripResult] = useState<TripResult | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -153,8 +200,34 @@ export default function CreateTripPage() {
   const [destinationErrors, setDestinationErrors] = useState<{
     destination?: string;
     secondDestination?: string;
+    thirdDestination?: string;
   }>({});
+  const [travelPreviews, setTravelPreviews] = useState<TravelPreview[]>([]);
   const [daysError, setDaysError] = useState("");
+  const [travelerError, setTravelerError] = useState("");
+  const [generationElapsedSeconds, setGenerationElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!loading) {
+      setGenerationElapsedSeconds(0);
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setGenerationElapsedSeconds((current) => current + 1);
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [loading]);
+
+  const generationStatusMessage =
+    generationElapsedSeconds >= 35
+      ? "This is taking longer than usual. The backend or AI service may still be processing your trip."
+      : generationElapsedSeconds >= 15
+        ? "Building a detailed itinerary across all selected destinations."
+        : "Preparing route flow, stay plan, and destination recommendations.";
+  const requiresMemberBreakdown = travelers === "family" || travelers === "friends";
+  const travelerConfig = getTravelerConfig(travelers, adults, children);
 
   useEffect(() => {
     const preSelectedDestination = localStorage.getItem("preSelectedDestination");
@@ -164,54 +237,135 @@ export default function CreateTripPage() {
     toast.success(`Destination set to ${preSelectedDestination}!`);
   }, []);
 
+  useEffect(() => {
+    const values = [
+      normalizeDestination(destination),
+      showSecondDestination ? normalizeDestination(secondDestination) : "",
+      showThirdDestination ? normalizeDestination(thirdDestination) : "",
+    ].filter(Boolean);
+
+    if (values.length < 2) {
+      setTravelPreviews([]);
+      return;
+    }
+
+    const validations = values.map((value) => validateDestination(value));
+    if (validations.some((result) => !result.isValid)) {
+      setTravelPreviews([]);
+      return;
+    }
+
+    if (new Set(values.map((value) => value.toLowerCase())).size !== values.length) {
+      setTravelPreviews([]);
+      return;
+    }
+
+    let isActive = true;
+
+    const loadTravelPreviews = async () => {
+      try {
+        const previews = await Promise.all(
+          values.slice(0, -1).map(async (fromDestination, index) => {
+            const response = await apiRequest("/api/trip/distance-preview", "POST", {
+              destination: fromDestination,
+              secondDestination: values[index + 1],
+            });
+
+            return response.success ? response.travel : null;
+          })
+        );
+
+        if (isActive) {
+          setTravelPreviews(previews.filter(Boolean));
+        }
+      } catch {
+        if (isActive) {
+          setTravelPreviews([]);
+        }
+      }
+    };
+
+    loadTravelPreviews();
+
+    return () => {
+      isActive = false;
+    };
+  }, [destination, secondDestination, thirdDestination, showSecondDestination, showThirdDestination]);
+
   const validateDestinations = () => {
-    const nextErrors: { destination?: string; secondDestination?: string } = {};
-    const firstValidation = validateDestination(destination);
-    let cleanedDestination = "";
-    let cleanedSecondDestination = "";
+    const nextErrors: {
+      destination?: string;
+      secondDestination?: string;
+      thirdDestination?: string;
+    } = {};
+    const validations = [
+      validateDestination(destination),
+      showSecondDestination
+        ? validateDestination(secondDestination, { emptyMessage: "Please enter a destination" })
+        : null,
+      showThirdDestination
+        ? validateDestination(thirdDestination, { emptyMessage: "Please enter a destination" })
+        : null,
+    ];
 
-    if (!firstValidation.isValid) {
-      nextErrors.destination = firstValidation.message;
-    } else {
-      cleanedDestination = firstValidation.cleanedValue!;
-    }
+    const cleanedDestinations: string[] = [];
+    const fields = ["destination", "secondDestination", "thirdDestination"] as const;
 
-    if (showSecondDestination) {
-      const secondValidation = validateDestination(secondDestination, {
-        emptyMessage: "Please enter a destination",
-      });
-      if (!secondValidation.isValid) {
-        nextErrors.secondDestination = secondValidation.message;
-      } else {
-        cleanedSecondDestination = secondValidation.cleanedValue!;
+    validations.forEach((validation, index) => {
+      if (!validation) return;
+
+      if (!validation.isValid) {
+        nextErrors[fields[index]] = validation.message;
+        return;
       }
+
       if (
-        cleanedDestination &&
-        cleanedSecondDestination &&
-        isDuplicateDestination(cleanedDestination, cleanedSecondDestination)
+        cleanedDestinations.some((addedDestination) =>
+          isDuplicateDestination(addedDestination, validation.cleanedValue!)
+        )
       ) {
-        nextErrors.secondDestination =
-          "Second destination cannot be the same as the first destination";
+        nextErrors[fields[index]] = "Destination already added";
+        return;
       }
-    }
+
+      cleanedDestinations.push(validation.cleanedValue!);
+    });
 
     setDestinationErrors(nextErrors);
+
     return {
       isValid: Object.keys(nextErrors).length === 0,
-      cleanedDestination,
-      cleanedSecondDestination,
+      cleanedDestinations,
       firstError: nextErrors.destination,
       secondError: nextErrors.secondDestination,
+      thirdError: nextErrors.thirdDestination,
     };
   };
 
   const resetSecondDestination = () => {
     setShowSecondDestination(false);
     setSecondDestination("");
+    setShowThirdDestination(false);
+    setThirdDestination("");
+    setTravelPreviews([]);
     setDestinationErrors((current) => ({ destination: current.destination }));
   };
 
+  const resetThirdDestination = () => {
+    setShowThirdDestination(false);
+    setThirdDestination("");
+    setTravelPreviews((current) => current.slice(0, 1));
+    setDestinationErrors((current) => ({
+      destination: current.destination,
+      secondDestination: current.secondDestination,
+    }));
+  };
+
   const generateTrip = async () => {
+    if (loading) {
+      return;
+    }
+
     const token = localStorage.getItem("token");
     if (!token) {
       toast.error("Authentication required", {
@@ -229,14 +383,36 @@ export default function CreateTripPage() {
       toast.error("Invalid trip duration", { description: "Trip duration must be between 1 and 15 days" });
       return;
     }
+    if (requiresMemberBreakdown) {
+      const minAdults = travelers === "family" ? 4 : 8;
+      const maxAdults = travelers === "family" ? 7 : 15;
+
+      if (!Number.isInteger(adults) || adults < minAdults || adults > maxAdults) {
+        const message = `Adults must be between ${minAdults} and ${maxAdults}`;
+        setTravelerError(message);
+        toast.error("Invalid travelers", { description: message });
+        return;
+      }
+
+      if (!Number.isInteger(children) || children < 0) {
+        setTravelerError("Children must be 0 or more");
+        toast.error("Invalid travelers", { description: "Children must be 0 or more" });
+        return;
+      }
+    }
     const validation = validateDestinations();
     if (!validation.isValid) {
       toast.error("Invalid trip details", {
-        description: validation.secondError || validation.firstError || "Please correct the destination fields",
+        description:
+          validation.thirdError ||
+          validation.secondError ||
+          validation.firstError ||
+          "Please correct the destination fields",
       });
       return;
     }
     setLoading(true);
+    setGenerationElapsedSeconds(0);
     setTripResult(null);
     setIsSaved(false);
     setHasUnsavedChanges(false);
@@ -245,19 +421,26 @@ export default function CreateTripPage() {
         "/api/trip/generate",
         "POST",
         {
-          destination: validation.cleanedDestination,
-          secondDestination: validation.cleanedSecondDestination || undefined,
+          destination: validation.cleanedDestinations[0],
+          secondDestination: validation.cleanedDestinations[1] || undefined,
+          thirdDestination: validation.cleanedDestinations[2] || undefined,
           days,
           budgetType,
           travelers,
+          adults: requiresMemberBreakdown ? adults : undefined,
+          children: requiresMemberBreakdown ? children : undefined,
         },
         token
       );
       if (!response.success) throw new Error(response.message || "Trip generation failed");
       setTripResult(response.trip);
       toast.success("Trip generated successfully");
-    } catch {
-      toast.error("Failed to generate trip", { description: "Please try again after some time" });
+    } catch (err: any) {
+      toast.error("Failed to generate trip", {
+        description:
+          err?.message ||
+          "The trip is taking longer than expected. Please wait a moment and try again.",
+      });
     } finally {
       setLoading(false);
     }
@@ -283,9 +466,16 @@ export default function CreateTripPage() {
             showSecondDestination && secondDestination.trim()
               ? normalizeDestination(secondDestination)
               : undefined,
+          thirdDestination:
+            showThirdDestination && thirdDestination.trim()
+              ? normalizeDestination(thirdDestination)
+              : undefined,
           days,
           budgetType,
           travelers,
+          travelerDetails: travelerConfig,
+          adults: requiresMemberBreakdown ? adults : undefined,
+          children: requiresMemberBreakdown ? children : undefined,
         },
         token
       );
@@ -374,75 +564,140 @@ export default function CreateTripPage() {
       </p>
 
       <div className="space-y-8">
-        {/* Destination */}
-        <div>
-          <label className="font-semibold block mb-2 text-gray-900">Destination</label>
-          <input
-            value={destination}
-            onChange={(e) => {
-              setDestination(e.target.value);
-              setDestinationErrors((current) => ({ ...current, destination: undefined }));
-            }}
-            placeholder="Ex: Goa, Dwarka, Manali"
-            className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition ${
-              destinationErrors.destination ? "border-red-400 bg-red-50" : "border-gray-200"
-            }`}
-          />
-          {destinationErrors.destination && (
-            <p className="mt-1.5 text-sm text-red-500">{destinationErrors.destination}</p>
-          )}
-        </div>
-
-        {/* Second Destination */}
-        {!showSecondDestination ? (
-          <button
-            type="button"
-            onClick={() => setShowSecondDestination(true)}
-            className="w-full rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-4 text-left transition hover:border-gray-500 hover:bg-white"
-          >
-            <div className="flex items-center gap-3">
-              <PlusCircle className="h-5 w-5 text-gray-500" />
-              <div>
-                <p className="font-semibold text-gray-900 text-sm">Add destination</p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Create a multi-destination route with a combined itinerary
-                </p>
-              </div>
-            </div>
-          </button>
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 transition-all duration-300">
-            <div className="flex items-start justify-between gap-4 p-4">
-              <div className="w-full">
-                <label className="font-semibold block mb-2 text-gray-900 text-sm">
-                  Second destination
-                </label>
+        {/* Destinations */}
+        <div className="space-y-4">
+          <div>
+            <label className="font-semibold block mb-2 text-gray-900">Destination</label>
+            <div className="flex items-start gap-3">
+              <div className="flex-1">
                 <input
-                  value={secondDestination}
+                  value={destination}
                   onChange={(e) => {
-                    setSecondDestination(e.target.value);
-                    setDestinationErrors((current) => ({ ...current, secondDestination: undefined }));
+                    setDestination(e.target.value);
+                    setDestinationErrors((current) => ({ ...current, destination: undefined }));
                   }}
-                  placeholder="Ex: Trimbakeshwar"
-                  className={`w-full border rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition ${
-                    destinationErrors.secondDestination ? "border-red-400 bg-red-50" : "border-gray-200"
+                  placeholder="Ex: Goa, Dwarka, Manali"
+                  className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition ${
+                    destinationErrors.destination ? "border-red-400 bg-red-50" : "border-gray-200"
                   }`}
                 />
-                {destinationErrors.secondDestination && (
-                  <p className="mt-1.5 text-sm text-red-500">{destinationErrors.secondDestination}</p>
+                {destinationErrors.destination && (
+                  <p className="mt-1.5 text-sm text-red-500">{destinationErrors.destination}</p>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={resetSecondDestination}
-                className="mt-8 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 transition hover:text-red-500 hover:border-red-300"
-                aria-label="Remove second destination"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              {!showSecondDestination && (
+                <button
+                  type="button"
+                  onClick={() => setShowSecondDestination(true)}
+                  className="inline-flex h-[50px] items-center gap-2 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 text-sm font-semibold text-gray-700 transition hover:border-gray-500 hover:bg-white"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  Add destination
+                </button>
+              )}
             </div>
           </div>
-        )}
+
+          {showSecondDestination && (
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 transition-all duration-300">
+              <div className="flex items-start justify-between gap-4 p-4">
+                <div className="w-full">
+                  <label className="font-semibold block mb-2 text-gray-900 text-sm">
+                    Second destination
+                  </label>
+                  <input
+                    value={secondDestination}
+                    onChange={(e) => {
+                      setSecondDestination(e.target.value);
+                      setDestinationErrors((current) => ({ ...current, secondDestination: undefined }));
+                    }}
+                    placeholder="Ex: Trimbakeshwar"
+                    className={`w-full border rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition ${
+                      destinationErrors.secondDestination ? "border-red-400 bg-red-50" : "border-gray-200"
+                    }`}
+                  />
+                  {destinationErrors.secondDestination && (
+                    <p className="mt-1.5 text-sm text-red-500">{destinationErrors.secondDestination}</p>
+                  )}
+                </div>
+                <div className="mt-8 flex items-center gap-2">
+                  {!showThirdDestination && normalizeDestination(secondDestination) && (
+                    <button
+                      type="button"
+                      onClick={() => setShowThirdDestination(true)}
+                      className="inline-flex h-10 items-center gap-2 rounded-lg border border-dashed border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 transition hover:border-gray-500"
+                    >
+                      <PlusCircle className="h-4 w-4" />
+                      Add more destination
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={resetSecondDestination}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 transition hover:text-red-500 hover:border-red-300"
+                    aria-label="Remove second destination"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showThirdDestination && (
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 transition-all duration-300">
+              <div className="flex items-start justify-between gap-4 p-4">
+                <div className="w-full">
+                  <label className="font-semibold block mb-2 text-gray-900 text-sm">
+                    Third destination
+                  </label>
+                  <input
+                    value={thirdDestination}
+                    onChange={(e) => {
+                      setThirdDestination(e.target.value);
+                      setDestinationErrors((current) => ({ ...current, thirdDestination: undefined }));
+                    }}
+                    placeholder="Ex: Shirdi"
+                    className={`w-full border rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition ${
+                      destinationErrors.thirdDestination ? "border-red-400 bg-red-50" : "border-gray-200"
+                    }`}
+                  />
+                  {destinationErrors.thirdDestination && (
+                    <p className="mt-1.5 text-sm text-red-500">{destinationErrors.thirdDestination}</p>
+                  )}
+                  <p className="mt-2 text-xs text-gray-400">Maximum 3 destinations allowed</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={resetThirdDestination}
+                  className="mt-8 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 transition hover:text-red-500 hover:border-red-300"
+                  aria-label="Remove third destination"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {travelPreviews.length > 0 && (
+            <div className="space-y-3">
+              {travelPreviews.map((travelPreview, index) => (
+                <div
+                  key={`${travelPreview.from}-${travelPreview.to}-${index}`}
+                  className="rounded-xl border border-amber-200 bg-amber-50 p-4"
+                >
+                  <p className="text-sm font-semibold text-amber-900">
+                    Travel from {travelPreview.from} {"->"} {travelPreview.to}
+                  </p>
+                  <div className="mt-2 grid gap-1 text-sm text-amber-900 md:grid-cols-2">
+                    <p><strong>Distance:</strong> {travelPreview.distanceText}</p>
+                    <p><strong>Travel time:</strong> {travelPreview.durationText}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Number of Days */}
         <div>
@@ -479,24 +734,115 @@ export default function CreateTripPage() {
         <div>
           <label className="font-semibold block mb-3 text-gray-900">Traveling with</label>
           <div className="grid md:grid-cols-4 gap-3">
-            <OptionCard title="Just Me" desc="Solo" icon="🧍" selected={travelers === "solo"} onClick={() => setTravelers("solo")} />
-            <OptionCard title="Couple" desc="Two travelers" icon="🥂" selected={travelers === "couple"} onClick={() => setTravelers("couple")} />
-            <OptionCard title="Family" desc="Family trip" icon="🏡" selected={travelers === "family"} onClick={() => setTravelers("family")} />
-            <OptionCard title="Friends" desc="Group travel" icon="⛵" selected={travelers === "friends"} onClick={() => setTravelers("friends")} />
+            <OptionCard
+              title="Just Me"
+              desc="Solo"
+              icon="🧍"
+              selected={travelers === "solo"}
+              onClick={() => {
+                setTravelers("solo");
+                setTravelerError("");
+              }}
+            />
+            <OptionCard
+              title="Couple"
+              desc="Two travelers"
+              icon="🥂"
+              selected={travelers === "couple"}
+              onClick={() => {
+                setTravelers("couple");
+                setTravelerError("");
+              }}
+            />
+            <OptionCard
+              title="Family"
+              desc="Family trip"
+              icon="🏡"
+              selected={travelers === "family"}
+              onClick={() => {
+                setTravelers("family");
+                setAdults((current) => (current >= 4 && current <= 7 ? current : 4));
+                setTravelerError("");
+              }}
+            />
+            <OptionCard
+              title="Friends"
+              desc="Group travel"
+              icon="⛵"
+              selected={travelers === "friends"}
+              onClick={() => {
+                setTravelers("friends");
+                setAdults((current) => (current >= 8 && current <= 15 ? current : 8));
+                setTravelerError("");
+              }}
+            />
           </div>
+          {requiresMemberBreakdown && (
+            <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Adults</label>
+                  <input
+                    type="number"
+                    min={travelers === "family" ? 4 : 8}
+                    max={travelers === "family" ? 7 : 15}
+                    value={adults}
+                    onChange={(e) => {
+                      setAdults(Number(e.target.value));
+                      setTravelerError("");
+                    }}
+                    className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Children</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={children}
+                    onChange={(e) => {
+                      setChildren(Number(e.target.value));
+                      setTravelerError("");
+                    }}
+                    className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              {travelerError && <p className="mt-2 text-sm text-red-500">{travelerError}</p>}
+            </div>
+          )}
         </div>
 
         {/* Generate Button */}
-        <div className="flex justify-end pt-2">
-          <button
-            onClick={generateTrip}
-            disabled={loading}
-            className={`px-7 py-3 rounded-xl text-sm font-semibold text-white transition-all ${
-              loading ? "bg-gray-300 cursor-not-allowed" : "bg-gray-900 hover:bg-gray-700"
-            }`}
-          >
-            {loading ? "Generating your trip..." : "Generate Trip"}
-          </button>
+        <div className="pt-2 space-y-3">
+          {loading && (
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-4 w-4 animate-spin text-gray-700" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    Generating your trip
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {generationElapsedSeconds}s elapsed
+                  </p>
+                </div>
+              </div>
+              <p className="mt-2 text-sm text-gray-600">{generationStatusMessage}</p>
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <button
+              onClick={generateTrip}
+              disabled={loading}
+              className={`px-7 py-3 rounded-xl text-sm font-semibold text-white transition-all ${
+                loading ? "bg-gray-300 cursor-not-allowed" : "bg-gray-900 hover:bg-gray-700"
+              }`}
+            >
+              {loading ? "Generating your trip..." : "Generate Trip"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -541,7 +887,13 @@ export default function CreateTripPage() {
           {tripResult.destinations && tripResult.destinations.length > 0 && (
             <div>
               <h3 className="text-xl font-semibold mb-4 text-gray-900">Destination Flow</h3>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div
+                className={`grid gap-4 ${
+                  tripResult.destinations.length === 3
+                    ? "md:grid-cols-2 xl:grid-cols-3"
+                    : "md:grid-cols-2"
+                }`}
+              >
                 {tripResult.destinations.map((stop, index) => (
                   <div key={stop.name} className="rounded-xl border border-gray-200 bg-gray-50 p-5">
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
@@ -573,36 +925,40 @@ export default function CreateTripPage() {
           )}
 
           {/* Travel Segment */}
-          {tripResult.travelSegment && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-600">
-                Travel Leg
-              </p>
-              <h3 className="mt-2 text-xl font-semibold text-gray-900">
-                {tripResult.travelSegment.from} to {tripResult.travelSegment.to}
-              </h3>
-              <div className="mt-3 grid gap-2 text-sm text-amber-900 md:grid-cols-2">
-                <p><strong>Distance:</strong> {tripResult.travelSegment.distanceText}</p>
-                <p><strong>Estimated travel time:</strong> {tripResult.travelSegment.durationText}</p>
-              </div>
-              {tripResult.travelSegment.summary && (
-                <p className="mt-3 text-sm text-amber-900">{tripResult.travelSegment.summary}</p>
-              )}
-              {(tripResult.travelSegment.recommendedBus ||
-                tripResult.travelSegment.recommendedRailway ||
-                tripResult.travelSegment.recommendedAirport) && (
-                <div className="mt-4 space-y-2 text-sm text-amber-900">
-                  {tripResult.travelSegment.recommendedBus && (
-                    <p><strong>Bus/Road:</strong> {tripResult.travelSegment.recommendedBus}</p>
+          {(tripResult.travelSegments || (tripResult.travelSegment ? [tripResult.travelSegment] : [])).length > 0 && (
+            <div className="space-y-4">
+              {(tripResult.travelSegments || (tripResult.travelSegment ? [tripResult.travelSegment] : [])).map((segment, index) => (
+                <div key={`${segment?.from}-${segment?.to}-${index}`} className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-600">
+                    Travel Leg {index + 1}
+                  </p>
+                  <h3 className="mt-2 text-xl font-semibold text-gray-900">
+                    {segment?.from} to {segment?.to}
+                  </h3>
+                  <div className="mt-3 grid gap-2 text-sm text-amber-900 md:grid-cols-2">
+                    <p><strong>Distance:</strong> {segment?.distanceText}</p>
+                    <p><strong>Estimated travel time:</strong> {segment?.durationText}</p>
+                  </div>
+                  {segment?.summary && (
+                    <p className="mt-3 text-sm text-amber-900">{segment.summary}</p>
                   )}
-                  {tripResult.travelSegment.recommendedRailway && (
-                    <p><strong>Railway:</strong> {tripResult.travelSegment.recommendedRailway}</p>
-                  )}
-                  {tripResult.travelSegment.recommendedAirport && (
-                    <p><strong>Airport:</strong> {tripResult.travelSegment.recommendedAirport}</p>
+                  {(segment?.recommendedBus ||
+                    segment?.recommendedRailway ||
+                    segment?.recommendedAirport) && (
+                    <div className="mt-4 space-y-2 text-sm text-amber-900">
+                      {segment?.recommendedBus && (
+                        <p><strong>Bus/Road:</strong> {segment.recommendedBus}</p>
+                      )}
+                      {segment?.recommendedRailway && (
+                        <p><strong>Railway:</strong> {segment.recommendedRailway}</p>
+                      )}
+                      {segment?.recommendedAirport && (
+                        <p><strong>Airport:</strong> {segment.recommendedAirport}</p>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
+              ))}
             </div>
           )}
 
@@ -744,6 +1100,9 @@ export default function CreateTripPage() {
                 </div>
               ) : (
                 <div className="space-y-1 text-sm text-gray-700">
+                  {tripResult.travelerDetails?.label && (
+                    <p><strong>Travel group:</strong> {tripResult.travelerDetails.label}</p>
+                  )}
                   <p><strong>Per Day:</strong> {tripResult.estimatedBudget.perDay}</p>
                   <p><strong>Total:</strong> {tripResult.estimatedBudget.total}</p>
                   {tripResult.estimatedBudget.note && (

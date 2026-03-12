@@ -5,6 +5,11 @@ import { apiRequest } from "../lib/api";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
+const ordinalLabel = (index: number) => {
+  const labels = ["1ST", "2ND", "3RD", "4TH", "5TH"];
+  return labels[index] ?? `${index + 1}TH`;
+};
+
 export default function SavedTripsPage() {
   const router = useRouter();
   const [trips, setTrips] = useState<any[]>([]);
@@ -79,12 +84,17 @@ export default function SavedTripsPage() {
       );
 
       if (res.success) {
+        setSelectedTrip(res.trip);
+        setTrips((currentTrips) =>
+          currentTrips.map((trip) => (trip._id === res.trip._id ? res.trip : trip))
+        );
         toast.success("Trip updated successfully!");
         setIsEditing(false);
-        fetchTrips();
       }
     } catch (err: any) {
-      toast.error("Failed to update trip");
+      toast.error("Failed to update trip", {
+        description: err?.message || "Please try again",
+      });
     } finally {
       setUpdating(false);
     }
@@ -242,9 +252,9 @@ export default function SavedTripsPage() {
             >
               <div className="mb-4">
                 <h3 className="font-bold text-2xl mb-3 text-gray-800">
-                  {trip.secondDestination
-                    ? `${trip.destination} -> ${trip.secondDestination}`
-                    : trip.destination}
+                  {[trip.destination, trip.secondDestination, trip.thirdDestination]
+                    .filter(Boolean)
+                    .join(" -> ")}
                 </h3>
                 <div className="space-y-2">
                   <div className="flex items-center text-gray-600">
@@ -257,8 +267,18 @@ export default function SavedTripsPage() {
                   </div>
                   <div className="flex items-center text-gray-600">
                     <span className="text-xl mr-2">👥</span>
-                    <span className="font-medium capitalize">{trip.travelers}</span>
+                    <span className="font-medium capitalize">
+                      {trip.travelerDetails?.label || trip.travelers}
+                    </span>
                   </div>
+                  {(trip.adults !== undefined || trip.children !== undefined) && (
+                    <div className="flex items-center text-gray-600">
+                      <span className="text-xl mr-2">A/C</span>
+                      <span className="font-medium">
+                        Adults: {trip.adults ?? 0}, Children: {trip.children ?? 0}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -345,60 +365,147 @@ export default function SavedTripsPage() {
                 </h3>
               )}
 
+              {selectedTrip.tripData?.overview && (
+                <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+                  <h4 className="font-semibold text-lg mb-3">Trip Overview</h4>
+                  <div className="space-y-2 text-sm text-gray-700">
+                    {selectedTrip.tripData.overview.routeSummary && (
+                      <p><strong>Route:</strong> {selectedTrip.tripData.overview.routeSummary}</p>
+                    )}
+                    {selectedTrip.tripData.overview.bestTimeToVisit && (
+                      <p><strong>Best Time:</strong> {selectedTrip.tripData.overview.bestTimeToVisit}</p>
+                    )}
+                    {selectedTrip.tripData.overview.weatherNote && (
+                      <p><strong>Weather Note:</strong> {selectedTrip.tripData.overview.weatherNote}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="bg-gray-50 p-5 rounded-lg">
+                  <h4 className="font-semibold text-lg mb-3">Trip Summary</h4>
+                  <div className="space-y-2 text-sm text-gray-700">
+                    <p><strong>Route:</strong> {[selectedTrip.destination, selectedTrip.secondDestination, selectedTrip.thirdDestination].filter(Boolean).join(" -> ")}</p>
+                    <p><strong>Days:</strong> {selectedTrip.days}</p>
+                    <p><strong>Budget Type:</strong> <span className="capitalize">{selectedTrip.budgetType}</span></p>
+                    <p><strong>Travelers:</strong> {selectedTrip.travelerDetails?.label || selectedTrip.travelers}</p>
+                    <p><strong>Adults:</strong> {selectedTrip.adults ?? selectedTrip.travelerDetails?.adults ?? 0}</p>
+                    <p><strong>Children:</strong> {selectedTrip.children ?? selectedTrip.travelerDetails?.children ?? 0}</p>
+                  </div>
+                </div>
+
+                {selectedTrip.tripData?.estimatedBudget && (
+                  <div className="bg-green-50 p-5 rounded-lg border border-green-200">
+                    <h4 className="font-semibold text-lg mb-3">Saved Budget Snapshot</h4>
+                    <div className="space-y-2 text-sm text-gray-700">
+                      <p><strong>Per Day:</strong> {selectedTrip.tripData.estimatedBudget.perDay}</p>
+                      <p><strong>Total:</strong> {selectedTrip.tripData.estimatedBudget.total}</p>
+                      {selectedTrip.tripData.estimatedBudget.note && (
+                        <p className="text-xs text-green-700">{selectedTrip.tripData.estimatedBudget.note}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {selectedTrip.tripData?.destinations?.length > 0 && (
+                <div>
+                  <h4 className="text-xl font-semibold mb-4 text-gray-900">Destination Flow</h4>
+                  <div
+                    className={`grid gap-4 ${
+                      selectedTrip.tripData.destinations.length === 3
+                        ? "md:grid-cols-2 xl:grid-cols-3"
+                        : "md:grid-cols-2"
+                    }`}
+                  >
+                    {selectedTrip.tripData.destinations.map((stop: any, index: number) => (
+                      <div key={`${stop.name}-${index}`} className="rounded-xl border border-gray-200 bg-gray-50 p-5">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
+                          {ordinalLabel(index)} Destination
+                        </p>
+                        <h4 className="mt-2 text-xl font-semibold text-gray-900">{stop.name}</h4>
+                        {stop.stayDays && (
+                          <p className="mt-1 text-sm text-gray-500">{stop.stayDays}</p>
+                        )}
+                        {stop.summary && (
+                          <p className="mt-3 text-sm text-gray-600 leading-relaxed">{stop.summary}</p>
+                        )}
+                        {stop.highlights?.length > 0 && (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {stop.highlights.map((highlight: string) => (
+                              <span
+                                key={`${stop.name}-${highlight}`}
+                                className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-600"
+                              >
+                                {highlight}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(selectedTrip.tripData?.travelSegments ||
+                (selectedTrip.tripData?.travelSegment ? [selectedTrip.tripData.travelSegment] : [])
+              )?.length > 0 && (
+                <div className="space-y-4">
+                  {(selectedTrip.tripData.travelSegments ||
+                    (selectedTrip.tripData.travelSegment ? [selectedTrip.tripData.travelSegment] : [])
+                  ).map((segment: any, index: number) => (
+                    <div key={`${segment?.from}-${segment?.to}-${index}`} className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-600">
+                        Travel Leg {index + 1}
+                      </p>
+                      <h4 className="mt-2 text-xl font-semibold text-gray-900">
+                        {segment?.from} to {segment?.to}
+                      </h4>
+                      <div className="mt-3 grid gap-2 text-sm text-amber-900 md:grid-cols-2">
+                        <p><strong>Distance:</strong> {segment?.distanceText}</p>
+                        <p><strong>Estimated travel time:</strong> {segment?.durationText}</p>
+                      </div>
+                      {segment?.summary && (
+                        <p className="mt-3 text-sm text-amber-900">{segment.summary}</p>
+                      )}
+                      {(segment?.recommendedBus || segment?.recommendedRailway || segment?.recommendedAirport) && (
+                        <div className="mt-4 space-y-2 text-sm text-amber-900">
+                          {segment?.recommendedBus && (
+                            <p><strong>Bus/Road:</strong> {segment.recommendedBus}</p>
+                          )}
+                          {segment?.recommendedRailway && (
+                            <p><strong>Railway:</strong> {segment.recommendedRailway}</p>
+                          )}
+                          {segment?.recommendedAirport && (
+                            <p><strong>Airport:</strong> {segment.recommendedAirport}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* TRANSPORT */}
               {selectedTrip.tripData.transport && (
                 <div className="bg-gray-50 p-5 rounded-lg">
                   <h4 className="font-semibold text-lg mb-3">How to Reach</h4>
-                  {isEditing ? (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-sm text-gray-600 font-medium">Railway:</label>
-                        <input
-                          type="text"
-                          value={selectedTrip.tripData.transport?.railwayStation || ""}
-                          onChange={(e) =>
-                            updateTransport("railwayStation", e.target.value)
-                          }
-                          className="w-full border rounded px-3 py-2 mt-1"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm text-gray-600 font-medium">Bus:</label>
-                        <input
-                          type="text"
-                          value={selectedTrip.tripData.transport?.busStation || ""}
-                          onChange={(e) =>
-                            updateTransport("busStation", e.target.value)
-                          }
-                          className="w-full border rounded px-3 py-2 mt-1"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm text-gray-600 font-medium">Airport:</label>
-                        <input
-                          type="text"
-                          value={selectedTrip.tripData.transport?.airport || ""}
-                          onChange={(e) => updateTransport("airport", e.target.value)}
-                          className="w-full border rounded px-3 py-2 mt-1"
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <p>
-                        <strong>Railway:</strong>{" "}
-                        {selectedTrip.tripData.transport.railwayStation}
-                      </p>
-                      <p>
-                        <strong>Bus:</strong>{" "}
-                        {selectedTrip.tripData.transport.busStation}
-                      </p>
-                      <p>
-                        <strong>Airport:</strong>{" "}
-                        {selectedTrip.tripData.transport.airport}
-                      </p>
-                    </div>
-                  )}
+                  <div className="space-y-2">
+                    <p>
+                      <strong>Railway:</strong>{" "}
+                      {selectedTrip.tripData.transport.railwayStation}
+                    </p>
+                    <p>
+                      <strong>Bus:</strong>{" "}
+                      {selectedTrip.tripData.transport.busStation}
+                    </p>
+                    <p>
+                      <strong>Airport:</strong>{" "}
+                      {selectedTrip.tripData.transport.airport}
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -418,6 +525,7 @@ export default function SavedTripsPage() {
                   </div>
 
                   {selectedTrip.tripData.itinerary.map((day: any, index: number) => {
+                    const isTravel = day.phaseType === "travel";
                     const previousDay = selectedTrip.tripData.itinerary[index - 1];
                     const showPhaseHeader =
                       index === 0 ||
@@ -427,6 +535,15 @@ export default function SavedTripsPage() {
 
                     return (
                     <div key={day.day} className="mb-4">
+                      {!isEditing && isTravel && (
+                        <div className="flex items-center gap-3 mb-2 px-1">
+                          <div className="flex-1 h-px bg-amber-200" />
+                          <span className="text-xs font-semibold uppercase tracking-widest text-amber-500 whitespace-nowrap">
+                            Travel Day
+                          </span>
+                          <div className="flex-1 h-px bg-amber-200" />
+                        </div>
+                      )}
                       {showPhaseHeader && (
                         <div
                           className={`mb-3 rounded-lg px-4 py-3 ${
@@ -447,9 +564,24 @@ export default function SavedTripsPage() {
                         </div>
                       )}
 
-                    <div className="border rounded-lg p-5 bg-gray-50">
+                    <div
+                      className={`border rounded-lg p-5 ${
+                        !isEditing && isTravel
+                          ? "bg-amber-50 border-amber-200"
+                          : "bg-gray-50 border-gray-200"
+                      }`}
+                    >
                       <div className="flex justify-between items-center mb-3">
-                        <h5 className="font-semibold text-lg">Day {day.day}</h5>
+                        <div className="flex items-center gap-2">
+                          <h5 className={`font-semibold text-lg ${!isEditing && isTravel ? "text-amber-900" : "text-gray-900"}`}>
+                            Day {day.day}
+                          </h5>
+                          {!isEditing && isTravel && day.phaseTitle && (
+                            <span className="text-xs font-medium text-amber-600 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full">
+                              {day.phaseTitle}
+                            </span>
+                          )}
+                        </div>
                         {isEditing && (
                           <button
                             onClick={() => removeDay(day.day)}
@@ -520,7 +652,7 @@ export default function SavedTripsPage() {
                           </div>
                         </div>
                       ) : (
-                        <div className="space-y-2">
+                        <div className={`space-y-2 ${isTravel ? "text-amber-900" : "text-gray-700"}`}>
                           <p>
                             <strong>Morning:</strong> {day.morning}
                           </p>
@@ -530,7 +662,7 @@ export default function SavedTripsPage() {
                           <p>
                             <strong>Evening:</strong> {day.evening}
                           </p>
-                          <p className="text-sm text-gray-500 mt-3 bg-white p-2 rounded">
+                          <p className={`text-sm mt-3 bg-white p-2 rounded ${isTravel ? "text-amber-700" : "text-gray-500"}`}>
                             💡 <strong>Tip:</strong> {day.localTravelTip}
                           </p>
                         </div>
@@ -539,6 +671,61 @@ export default function SavedTripsPage() {
                     </div>
                   );
                   })}
+                </div>
+              )}
+
+              {selectedTrip.tripData?.placesToVisit?.length > 0 && (
+                <div>
+                  <h4 className="text-xl font-semibold mb-4">Places To Visit</h4>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {selectedTrip.tripData.placesToVisit.map((place: any, index: number) => (
+                      <div key={`${place.name}-${index}`} className="border rounded-lg p-4 bg-gray-50">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+                          {place.destination || "Highlight"}
+                        </p>
+                        <p className="mt-2 font-semibold text-gray-900">{place.name}</p>
+                        {place.description && (
+                          <p className="mt-2 text-sm text-gray-600">{place.description}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedTrip.tripData?.foodRecommendations?.length > 0 && (
+                <div>
+                  <h4 className="text-xl font-semibold mb-4">Food Recommendations</h4>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {selectedTrip.tripData.foodRecommendations.map((food: any, index: number) => (
+                      <div key={`${typeof food === "string" ? food : food.name}-${index}`} className="border rounded-lg p-4 bg-gray-50">
+                        {typeof food === "string" ? (
+                          <p className="text-sm text-gray-700">{food}</p>
+                        ) : (
+                          <>
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+                              {food.destination || "Local Food"}
+                            </p>
+                            <p className="mt-2 font-semibold text-gray-900">{food.name}</p>
+                            {food.description && (
+                              <p className="mt-2 text-sm text-gray-600">{food.description}</p>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedTrip.tripData?.travelTips?.length > 0 && (
+                <div className="bg-blue-50 p-5 rounded-lg border border-blue-200">
+                  <h4 className="font-semibold text-lg mb-3">Travel Tips</h4>
+                  <div className="space-y-2 text-sm text-gray-700">
+                    {selectedTrip.tripData.travelTips.map((tip: string, index: number) => (
+                      <p key={`${tip}-${index}`}>• {tip}</p>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -608,6 +795,11 @@ export default function SavedTripsPage() {
                         <strong>Total:</strong>{" "}
                         {selectedTrip.tripData.estimatedBudget.total}
                       </p>
+                      {selectedTrip.tripData.estimatedBudget.note && (
+                        <p className="text-sm text-green-700">
+                          {selectedTrip.tripData.estimatedBudget.note}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
