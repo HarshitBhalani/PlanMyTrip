@@ -24,7 +24,27 @@ export const getUser = (): AuthUser | null => {
   if (typeof window === "undefined") return null;
 
   const raw = localStorage.getItem("user");
-  return raw ? JSON.parse(raw) : null;
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsedUser = JSON.parse(raw);
+
+    if (
+      !parsedUser ||
+      typeof parsedUser !== "object" ||
+      typeof parsedUser.fullName !== "string"
+    ) {
+      localStorage.removeItem("user");
+      return null;
+    }
+
+    return parsedUser;
+  } catch {
+    localStorage.removeItem("user");
+    return null;
+  }
 };
 
 /* ============================

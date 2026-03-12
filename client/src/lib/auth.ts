@@ -25,7 +25,27 @@ export const getUser = (): AuthUser | null => {
   if (typeof window === "undefined") return null;
 
   const rawUser = localStorage.getItem("user");
-  return rawUser ? JSON.parse(rawUser) : null;
+  if (!rawUser) {
+    return null;
+  }
+
+  try {
+    const parsedUser = JSON.parse(rawUser);
+
+    if (
+      !parsedUser ||
+      typeof parsedUser !== "object" ||
+      typeof parsedUser.fullName !== "string"
+    ) {
+      localStorage.removeItem("user");
+      return null;
+    }
+
+    return parsedUser;
+  } catch {
+    localStorage.removeItem("user");
+    return null;
+  }
 };
 
 /* =====================

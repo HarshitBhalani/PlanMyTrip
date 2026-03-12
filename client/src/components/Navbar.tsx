@@ -49,7 +49,7 @@ export default function Navbar() {
           ) : (
             <div ref={ref} className="relative">
               <button onClick={() => setOpen(!open)}>
-                {user.fullName}
+                {user.fullName || "Account"}
               </button>
 
               {open && (
