@@ -23,6 +23,39 @@ const formatSavedAt = (value?: string) => {
   });
 };
 
+const toDisplayText = (value: unknown, fallback = "-"): string => {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    const flattened = value
+      .map((item) => toDisplayText(item, ""))
+      .filter(Boolean)
+      .join(", ");
+
+    return flattened || fallback;
+  }
+
+  if (typeof value === "object") {
+    if ("name" in (value as Record<string, unknown>) && typeof (value as Record<string, unknown>).name === "string") {
+      return String((value as Record<string, unknown>).name);
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return fallback;
+    }
+  }
+
+  return fallback;
+};
+
 const getApiUrl = () => {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -92,8 +125,8 @@ export default async function SharedTripPage({
         <div className="mt-4 grid gap-3 text-sm text-gray-600 md:grid-cols-2">
           <p><strong>Route:</strong> {routeLabel || "-"}</p>
           <p><strong>Saved On:</strong> {formatSavedAt(trip.createdAt) || "-"}</p>
-          <p><strong>Days:</strong> {trip.days}</p>
-          <p><strong>Travel Group:</strong> {trip.travelerDetails?.label || trip.travelers || "-"}</p>
+          <p><strong>Days:</strong> {toDisplayText(trip.days)}</p>
+          <p><strong>Travel Group:</strong> {toDisplayText(trip.travelerDetails?.label || trip.travelers)}</p>
         </div>
       </div>
 
@@ -102,9 +135,9 @@ export default async function SharedTripPage({
           <div className="bg-gray-50 border border-gray-200 p-5 rounded-xl">
             <h3 className="font-semibold text-gray-900 mb-3">Trip Overview</h3>
             <div className="space-y-2 text-sm text-gray-700">
-              {tripData.overview.routeSummary && <p><strong>Route:</strong> {tripData.overview.routeSummary}</p>}
-              {tripData.overview.bestTimeToVisit && <p><strong>Best Time:</strong> {tripData.overview.bestTimeToVisit}</p>}
-              {tripData.overview.weatherNote && <p><strong>Weather Note:</strong> {tripData.overview.weatherNote}</p>}
+              {tripData.overview.routeSummary && <p><strong>Route:</strong> {toDisplayText(tripData.overview.routeSummary)}</p>}
+              {tripData.overview.bestTimeToVisit && <p><strong>Best Time:</strong> {toDisplayText(tripData.overview.bestTimeToVisit)}</p>}
+              {tripData.overview.weatherNote && <p><strong>Weather Note:</strong> {toDisplayText(tripData.overview.weatherNote)}</p>}
             </div>
           </div>
         )}
@@ -118,14 +151,14 @@ export default async function SharedTripPage({
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
                     {ordinalLabel(index)} Destination
                   </p>
-                  <h4 className="mt-2 text-xl font-semibold text-gray-900">{stop.name}</h4>
-                  {stop.stayDays && <p className="mt-1 text-sm text-gray-500">{stop.stayDays}</p>}
-                  {stop.summary && <p className="mt-3 text-sm text-gray-600 leading-relaxed">{stop.summary}</p>}
+                  <h4 className="mt-2 text-xl font-semibold text-gray-900">{toDisplayText(stop.name)}</h4>
+                  {stop.stayDays && <p className="mt-1 text-sm text-gray-500">{toDisplayText(stop.stayDays)}</p>}
+                  {stop.summary && <p className="mt-3 text-sm text-gray-600 leading-relaxed">{toDisplayText(stop.summary)}</p>}
                   {stop.highlights?.length > 0 && (
                     <div className="mt-4 flex flex-wrap gap-2">
-                      {stop.highlights.map((highlight: string) => (
-                        <span key={`${stop.name}-${highlight}`} className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-600">
-                          {highlight}
+                      {stop.highlights.map((highlight: unknown, index: number) => (
+                        <span key={`${toDisplayText(stop.name)}-${index}`} className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-600">
+                          {toDisplayText(highlight)}
                         </span>
                       ))}
                     </div>
@@ -144,13 +177,13 @@ export default async function SharedTripPage({
                   Travel Leg {index + 1}
                 </p>
                 <h3 className="mt-2 text-xl font-semibold text-gray-900">
-                  {segment?.from} to {segment?.to}
+                  {toDisplayText(segment?.from)} to {toDisplayText(segment?.to)}
                 </h3>
                 <div className="mt-3 grid gap-2 text-sm text-amber-900 md:grid-cols-2">
-                  <p><strong>Distance:</strong> {segment?.distanceText}</p>
-                  <p><strong>Estimated travel time:</strong> {segment?.durationText}</p>
+                  <p><strong>Distance:</strong> {toDisplayText(segment?.distanceText)}</p>
+                  <p><strong>Estimated travel time:</strong> {toDisplayText(segment?.durationText)}</p>
                 </div>
-                {segment?.summary && <p className="mt-3 text-sm text-amber-900">{segment.summary}</p>}
+                {segment?.summary && <p className="mt-3 text-sm text-amber-900">{toDisplayText(segment.summary)}</p>}
               </div>
             ))}
           </div>
@@ -160,9 +193,9 @@ export default async function SharedTripPage({
           <div className="bg-gray-50 border border-gray-200 p-5 rounded-xl">
             <h3 className="font-semibold mb-3 text-gray-900">How to Reach</h3>
             <div className="space-y-1 text-sm text-gray-700">
-              <p><strong>Railway:</strong> {tripData.transport.railwayStation}</p>
-              <p><strong>Bus:</strong> {tripData.transport.busStation}</p>
-              <p><strong>Airport:</strong> {tripData.transport.airport}</p>
+              <p><strong>Railway:</strong> {toDisplayText(tripData.transport.railwayStation)}</p>
+              <p><strong>Bus:</strong> {toDisplayText(tripData.transport.busStation)}</p>
+              <p><strong>Airport:</strong> {toDisplayText(tripData.transport.airport)}</p>
             </div>
           </div>
         )}
@@ -185,19 +218,19 @@ export default async function SharedTripPage({
                   )}
                   <div className={`rounded-xl p-5 border ${isTravel ? "bg-amber-50 border-amber-200" : "bg-white border-gray-200"}`}>
                     <div className="flex items-center gap-2 mb-3">
-                      <h3 className={`font-semibold ${isTravel ? "text-amber-900" : "text-gray-900"}`}>Day {day.day}</h3>
+                      <h3 className={`font-semibold ${isTravel ? "text-amber-900" : "text-gray-900"}`}>Day {toDisplayText(day.day)}</h3>
                       {isTravel && day.phaseTitle && (
                         <span className="text-xs font-medium text-amber-600 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full">
-                          {day.phaseTitle}
+                          {toDisplayText(day.phaseTitle)}
                         </span>
                       )}
                     </div>
                     <div className={`space-y-1.5 text-sm ${isTravel ? "text-amber-900" : "text-gray-700"}`}>
-                      <p><strong>Morning:</strong> {day.morning}</p>
-                      <p><strong>Afternoon:</strong> {day.afternoon}</p>
-                      <p><strong>Evening:</strong> {day.evening}</p>
+                      <p><strong>Morning:</strong> {toDisplayText(day.morning)}</p>
+                      <p><strong>Afternoon:</strong> {toDisplayText(day.afternoon)}</p>
+                      <p><strong>Evening:</strong> {toDisplayText(day.evening)}</p>
                       <p className={`text-xs mt-2 ${isTravel ? "text-amber-600" : "text-gray-400"}`}>
-                        Tip: {day.localTravelTip}
+                        Tip: {toDisplayText(day.localTravelTip)}
                       </p>
                     </div>
                   </div>
@@ -216,8 +249,8 @@ export default async function SharedTripPage({
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
                     {place.destination || "Highlight"}
                   </p>
-                  <p className="mt-2 font-semibold text-gray-900">{place.name}</p>
-                  {place.description && <p className="mt-2 text-sm text-gray-600">{place.description}</p>}
+                  <p className="mt-2 font-semibold text-gray-900">{toDisplayText(place.name)}</p>
+                  {place.description && <p className="mt-2 text-sm text-gray-600">{toDisplayText(place.description)}</p>}
                 </div>
               ))}
             </div>
@@ -231,14 +264,14 @@ export default async function SharedTripPage({
               {tripData.foodRecommendations.map((food: any, index: number) => (
                 <div key={`${typeof food === "string" ? food : food.name}-${index}`} className="border rounded-lg p-4 bg-gray-50">
                   {typeof food === "string" ? (
-                    <p className="text-sm text-gray-700">{food}</p>
+                    <p className="text-sm text-gray-700">{toDisplayText(food)}</p>
                   ) : (
                     <>
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
-                        {food.destination || "Local Food"}
+                        {toDisplayText(food.destination || "Local Food")}
                       </p>
-                      <p className="mt-2 font-semibold text-gray-900">{food.name}</p>
-                      {food.description && <p className="mt-2 text-sm text-gray-600">{food.description}</p>}
+                      <p className="mt-2 font-semibold text-gray-900">{toDisplayText(food.name)}</p>
+                      {food.description && <p className="mt-2 text-sm text-gray-600">{toDisplayText(food.description)}</p>}
                     </>
                   )}
                 </div>
@@ -252,7 +285,7 @@ export default async function SharedTripPage({
             <h3 className="font-semibold text-lg mb-3">Travel Tips</h3>
             <div className="space-y-2 text-sm text-gray-700">
               {tripData.travelTips.map((tip: string, index: number) => (
-                <p key={`${tip}-${index}`}>• {tip}</p>
+                <p key={`${toDisplayText(tip)}-${index}`}>• {toDisplayText(tip)}</p>
               ))}
             </div>
           </div>
@@ -265,8 +298,8 @@ export default async function SharedTripPage({
               <div key={`${hotel.name}-${index}`} className="border p-5 rounded-lg mb-3 bg-gray-50">
                 <div className="flex justify-between items-center">
                   <div>
-                    <p className="font-semibold text-lg">{hotel.name}</p>
-                    <p className="text-gray-600">{hotel.priceRangePerNight}</p>
+                    <p className="font-semibold text-lg">{toDisplayText(hotel.name)}</p>
+                    <p className="text-gray-600">{toDisplayText(hotel.priceRangePerNight)}</p>
                   </div>
                   {hotel.bookingUrl && (
                     <a
@@ -288,10 +321,10 @@ export default async function SharedTripPage({
           <div className="bg-green-50 p-5 rounded-lg border border-green-200">
             <h3 className="font-semibold text-lg mb-3">Estimated Budget</h3>
             <div className="space-y-2 text-sm text-gray-700">
-              <p><strong>Per Day:</strong> {tripData.estimatedBudget.perDay}</p>
-              <p><strong>Total:</strong> {tripData.estimatedBudget.total}</p>
+              <p><strong>Per Day:</strong> {toDisplayText(tripData.estimatedBudget.perDay)}</p>
+              <p><strong>Total:</strong> {toDisplayText(tripData.estimatedBudget.total)}</p>
               {tripData.estimatedBudget.note && (
-                <p className="text-sm text-green-700">{tripData.estimatedBudget.note}</p>
+                <p className="text-sm text-green-700">{toDisplayText(tripData.estimatedBudget.note)}</p>
               )}
             </div>
           </div>
