@@ -1,26 +1,28 @@
 # AI Trip Planner
 
-Full-stack AI-powered trip planning application with:
-- `client`: Next.js frontend
-- `server`: Express + TypeScript API
-- MongoDB for persistence
-- Groq LLM for itinerary generation
+Full-stack AI trip planning app with a Next.js frontend and an Express + TypeScript backend. It generates structured itineraries, supports multi-destination trips, saves trips for later editing, and lets users share read-only public trip links.
 
 ## Features
 
-- User signup/login with JWT authentication
-- Generate day-wise itineraries using AI
-- Budget-aware cost estimation (`cheap`, `moderate`, `luxury`)
-- Save trips to MongoDB and view/delete later
-- Destination inspiration landing page with category-based suggestions
+- JWT-based signup and login
+- AI-generated itineraries with day-wise planning
+- Single, two-destination, and three-destination trip support
+- Destination phase and travel-leg formatting for multi-stop trips
+- Family/friends group input with adult and child validation
+- Budget estimation based on trip type, members, days, destinations, and transfers
+- Saved trips with edit, delete, PDF download, and public sharing
+- Read-only public shared trip pages
+- Rate limiting on AI trip generation with JWT-aware user/IP fallback
+- Distance preview endpoint for destination-to-destination travel
 
 ## Tech Stack
 
 - Frontend: Next.js 16, React 19, TypeScript, Tailwind CSS
 - Backend: Node.js, Express 5, TypeScript, Mongoose
 - Database: MongoDB
-- AI: Groq (`llama-3.1-8b-instant`)
+- AI: Groq
 - Auth: JWT + bcrypt
+- PDF Export: `jspdf` + `jspdf-autotable`
 
 ## Project Structure
 
@@ -28,18 +30,21 @@ Full-stack AI-powered trip planning application with:
 ai-trip-planner/
   client/                  # Next.js app
     src/app/               # App Router pages
-    src/components/        # UI and feature components
+    src/components/        # Shared UI
+    src/lib/               # Auth and API helpers
+    src/utils/             # Frontend validation helpers
   server/                  # Express API
     src/controllers/       # Route handlers
     src/routes/            # API route definitions
     src/models/            # Mongoose schemas
-    src/middleware/        # Auth middleware
-    src/services/          # AI service integration
+    src/middleware/        # Auth, validation, rate limiting
+    src/services/          # AI integration
+    src/utils/             # Distance and destination helpers
 ```
 
 ## Prerequisites
 
-- Node.js 20+ (recommended)
+- Node.js 20+
 - npm
 - MongoDB database URI
 - Groq API key
@@ -55,7 +60,27 @@ MONGODB_URI=your_mongodb_connection_string
 JWT_SECRET=your_jwt_secret
 JWT_EXPIRES_IN=7d
 GROQ_API_KEY=your_groq_api_key
+
+# Development rate limits
+DEV_RATE_LIMIT_BURST_MAX=50
+DEV_RATE_LIMIT_BURST_WINDOW_SEC=30
+DEV_RATE_LIMIT_USER_MAX=500
+DEV_RATE_LIMIT_USER_WINDOW_SEC=3600
+DEV_RATE_LIMIT_IP_MAX=200
+DEV_RATE_LIMIT_IP_WINDOW_SEC=3600
+
+# Production rate limits
+PROD_RATE_LIMIT_BURST_MAX=3
+PROD_RATE_LIMIT_BURST_WINDOW_SEC=30
+PROD_RATE_LIMIT_USER_MAX=15
+PROD_RATE_LIMIT_USER_WINDOW_SEC=3600
+PROD_RATE_LIMIT_IP_MAX=8
+PROD_RATE_LIMIT_IP_WINDOW_SEC=3600
 ```
+
+Defaults if rate-limit env vars are missing:
+- Development: burst `20/30s`, user `100/hour`, IP `50/hour`
+- Production: burst `2/30s`, user `10/hour`, IP `5/hour`
 
 ### `client/.env.local`
 
@@ -84,7 +109,7 @@ cd server
 npm run dev
 ```
 
-Start frontend (new terminal):
+Start frontend in a new terminal:
 
 ```bash
 cd client
@@ -97,61 +122,88 @@ Open:
 
 ## Available Scripts
 
-### Client (`client/package.json`)
+### Client
 
 - `npm run dev` - start Next.js dev server
 - `npm run build` - production build
 - `npm run start` - run production build
 - `npm run lint` - run ESLint
 
-### Server (`server/package.json`)
+### Server
 
-- `npm run dev` - start with nodemon + ts-node
+- `npm run dev` - start backend with nodemon
 - `npm run build` - compile TypeScript to `dist/`
-- `npm run start` - run compiled server
+- `npm run start` - run compiled backend with `node dist/server.js`
 
 ## API Overview
 
 Base URL: `http://localhost:5000`
 
-Auth:
+### Auth
+
 - `POST /api/auth/signup`
 - `POST /api/auth/login`
 
-Trips (protected):
-- `POST /api/trip/generate`
-- `POST /api/trip/save`
-- `GET /api/trip/my-trips`
-- `GET /api/trip/:id`
-- `DELETE /api/trip/:id`
+### Trips
 
-User preferences (protected):
-- `GET /api/user/preferences`
-- `PUT /api/user/preferences`
+- `POST /api/trip/distance-preview`
+- `POST /api/trip/generate` (protected, rate limited)
+- `POST /api/trip/save` (protected)
+- `GET /api/trip/my-trips` (protected)
+- `GET /api/trip/:id` (protected)
+- `PUT /api/trip/:id` (protected)
+- `DELETE /api/trip/:id` (protected)
+- `POST /api/trip/:id/share` (protected)
+- `GET /api/trip/public/:slug`
 
-Health:
+### User Preferences
+
+- `GET /api/user/preferences` (protected)
+- `PUT /api/user/preferences` (protected)
+
+### Health
+
 - `GET /api/health`
 
 ## Current App Flow
 
 1. User signs up or logs in.
-2. JWT token is stored in browser `localStorage`.
-3. User creates a trip (`destination`, `days`, `budgetType`, `travelers`).
-4. Backend generates structured itinerary via Groq model.
-5. User optionally edits itinerary and saves it.
-6. Saved trips can be viewed and deleted from dashboard.
+2. JWT token is stored in browser storage.
+3. User creates a trip with one to three destinations, days, budget type, and traveler type.
+4. For `family` and `friends`, the form also collects adult and child counts.
+5. Backend validates input, applies rate limits, and generates a structured AI itinerary.
+6. User can review the generated trip, then save it.
+7. Saved trips can be viewed, edited, deleted, downloaded as PDF, or shared via a public read-only link.
 
-## Notes / Known Gaps
+## Multi-Destination Behavior
 
-- `saved-trips` frontend currently calls `PUT /api/trip/:id` for updates, but this route is not implemented on backend.
-- `preferences` frontend currently calls `POST /api/preferences`; backend expects `PUT /api/user/preferences`.
-- CORS is configured in backend for:
-  - `http://localhost:3000`
-  - `https://plan-my-trip-iota.vercel.app`
+- Maximum 3 destinations per trip
+- Total trip days remain fixed across all destinations
+- AI itinerary separates:
+  - destination phases
+  - travel phases
+  - destination-to-destination transitions
+- Travel leg details include approximate distance and duration when available
+
+## Saved Trip Features
+
+- Full saved itinerary rendering
+- Edit support for itinerary and trip details
+- PDF download with PlanMyTrip branding
+- Saved date/time visible on trip cards
+- Public share links for read-only trip viewing
 
 ## Deployment Notes
 
-- Backend code includes a Render keep-alive ping in `server/src/server.ts`.
-- Ensure production env variables are configured on both frontend and backend.
-- Set frontend `NEXT_PUBLIC_API_URL` to deployed backend URL.
+- Backend production service should use:
+  - Build Command: `npm run build`
+  - Start Command: `npm start`
+- Do not run `npm run dev` in production environments like Render.
+- Configure backend env vars in the hosting dashboard; do not rely on committing `.env`.
+- Set frontend `NEXT_PUBLIC_API_URL` to the deployed backend URL.
+- Backend CORS is configured for local frontend and the deployed Vercel frontend.
 
+## Notes
+
+- `server/dist/` is a generated build output and should not be committed.
+- Shared trip links are read-only and do not expose edit/delete actions.
