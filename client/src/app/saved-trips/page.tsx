@@ -242,7 +242,9 @@ export default function SavedTripsPage() {
             >
               <div className="mb-4">
                 <h3 className="font-bold text-2xl mb-3 text-gray-800">
-                  {trip.destination}
+                  {trip.secondDestination
+                    ? `${trip.destination} -> ${trip.secondDestination}`
+                    : trip.destination}
                 </h3>
                 <div className="space-y-2">
                   <div className="flex items-center text-gray-600">
@@ -415,8 +417,37 @@ export default function SavedTripsPage() {
                     )}
                   </div>
 
-                  {selectedTrip.tripData.itinerary.map((day: any) => (
-                    <div key={day.day} className="border rounded-lg p-5 mb-4 bg-gray-50">
+                  {selectedTrip.tripData.itinerary.map((day: any, index: number) => {
+                    const previousDay = selectedTrip.tripData.itinerary[index - 1];
+                    const showPhaseHeader =
+                      index === 0 ||
+                      previousDay?.phaseTitle !== day.phaseTitle ||
+                      previousDay?.phaseType !== day.phaseType ||
+                      previousDay?.destination !== day.destination;
+
+                    return (
+                    <div key={day.day} className="mb-4">
+                      {showPhaseHeader && (
+                        <div
+                          className={`mb-3 rounded-lg px-4 py-3 ${
+                            day.phaseType === "travel"
+                              ? "border border-amber-200 bg-amber-50"
+                              : "border border-slate-200 bg-slate-50"
+                          }`}
+                        >
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">
+                            {day.phaseType === "travel" ? "Travel Phase" : "Destination Phase"}
+                          </p>
+                          <h5 className="mt-1 text-lg font-semibold text-gray-900">
+                            {day.phaseTitle || day.destination || `Day ${day.day}`}
+                          </h5>
+                          {day.destination && (
+                            <p className="mt-1 text-sm text-gray-600">{day.destination}</p>
+                          )}
+                        </div>
+                      )}
+
+                    <div className="border rounded-lg p-5 bg-gray-50">
                       <div className="flex justify-between items-center mb-3">
                         <h5 className="font-semibold text-lg">Day {day.day}</h5>
                         {isEditing && (
@@ -505,7 +536,9 @@ export default function SavedTripsPage() {
                         </div>
                       )}
                     </div>
-                  ))}
+                    </div>
+                  );
+                  })}
                 </div>
               )}
 

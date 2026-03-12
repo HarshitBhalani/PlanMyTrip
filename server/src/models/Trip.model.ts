@@ -13,6 +13,10 @@ const TripSchema = new Schema(
       required: true,
     },
 
+    secondDestination: {
+      type: String,
+    },
+
     days: {
       type: Number,
       required: true,

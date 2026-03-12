@@ -1,4 +1,8 @@
 import { NextFunction, Request, Response } from "express";
+import {
+  areSameDestination,
+  validateDestinationName,
+} from "../utils/destination";
 
 const ALLOWED_BUDGET_TYPES = new Set(["cheap", "moderate", "luxury"]);
 const ALLOWED_TRAVELERS = new Set(["solo", "couple", "friends", "family"]);
@@ -35,11 +39,9 @@ export const validateGenerateTripRequest = (
     });
   }
 
-  const { destination, days, budgetType, travelers } = req.body;
+  const { destination, secondDestination, days, budgetType, travelers } = req.body;
 
   if (
-    typeof destination !== "string" ||
-    !destination.trim() ||
     days === undefined ||
     days === null ||
     typeof budgetType !== "string" ||
@@ -51,12 +53,21 @@ export const validateGenerateTripRequest = (
     });
   }
 
-  const parsedDays = Number(days);
+  const primaryDestinationValidation = validateDestinationName(destination);
 
-  if (!Number.isInteger(parsedDays) || parsedDays < 1 || parsedDays > 30) {
+  if (!primaryDestinationValidation.isValid) {
     return res.status(400).json({
       success: false,
-      message: "Days must be an integer between 1 and 30",
+      message: primaryDestinationValidation.message,
+    });
+  }
+
+  const parsedDays = Number(days);
+
+  if (!Number.isInteger(parsedDays) || parsedDays < 1 || parsedDays > 15) {
+    return res.status(400).json({
+      success: false,
+      message: "Days must be an integer between 1 and 15",
     });
   }
 
@@ -74,11 +85,30 @@ export const validateGenerateTripRequest = (
     });
   }
 
-  if (destination.trim().length > 80) {
-    return res.status(400).json({
-      success: false,
-      message: "Destination is too long",
-    });
+  if (secondDestination !== undefined && secondDestination !== null && secondDestination !== "") {
+    const secondDestinationValidation = validateDestinationName(
+      secondDestination,
+      "Please enter a destination"
+    );
+
+    if (!secondDestinationValidation.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: secondDestinationValidation.message,
+      });
+    }
+
+    if (
+      areSameDestination(
+        primaryDestinationValidation.cleanedValue!,
+        secondDestinationValidation.cleanedValue!
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Second destination cannot be the same as the first destination",
+      });
+    }
   }
 
   return next();

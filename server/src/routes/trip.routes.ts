@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   generateTrip,
+  previewTripDistance,
   saveTrip,
   getMyTrips,
   getTripById,
@@ -17,6 +18,7 @@ import { validateGenerateTripRequest } from "../middleware/tripValidation.middle
 
 const router = Router();
 
+router.post("/distance-preview", previewTripDistance);
 router.post(
   "/generate",
   attachRateLimitIdentity,
