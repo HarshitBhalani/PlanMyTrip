@@ -611,6 +611,15 @@ export default function SavedTripsPage() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
+                    deleteTrip(trip._id);
+                  }}
+                  className="px-4 py-2 bg-red-500 text-white text-sm rounded-md hover:bg-red-600 font-medium"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
                     downloadTripPdf(trip);
                   }}
                   disabled={downloadingTripId === trip._id}
@@ -623,15 +632,6 @@ export default function SavedTripsPage() {
                   title="Download trip PDF"
                 >
                   <Download className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteTrip(trip._id);
-                  }}
-                  className="px-4 py-2 bg-red-500 text-white text-sm rounded-md hover:bg-red-600 font-medium"
-                >
-                  Delete
                 </button>
                 <button
                   onClick={(e) => {
