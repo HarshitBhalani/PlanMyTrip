@@ -75,6 +75,33 @@ type TripResult = {
   };
 };
 
+const FAMILY_ADULT_LIMITS = {
+  min: 2,
+  max: 7,
+} as const;
+
+const FAMILY_CHILD_LIMITS = {
+  min: 0,
+  max: 5,
+} as const;
+
+const FRIENDS_ADULT_LIMITS = {
+  min: 8,
+  max: 15,
+} as const;
+
+const normalizeTravelerErrorMessage = (message?: string) => {
+  if (!message) {
+    return message;
+  }
+
+  if (message.includes("Adults must be an integer between 4 and 7")) {
+    return `Adults must be between ${FAMILY_ADULT_LIMITS.min} and ${FAMILY_ADULT_LIMITS.max}`;
+  }
+
+  return message;
+};
+
 const getTravelerConfig = (
   travelers: string,
   adults: number,
@@ -98,8 +125,14 @@ const getTravelerConfig = (
     };
   }
 
-  const safeAdults = Math.max(0, adults);
-  const safeChildren = Math.max(0, children);
+  const safeAdults =
+    travelers === "family"
+      ? Math.max(FAMILY_ADULT_LIMITS.min, adults)
+      : Math.max(0, adults);
+  const safeChildren =
+    travelers === "family"
+      ? Math.min(FAMILY_CHILD_LIMITS.max, Math.max(FAMILY_CHILD_LIMITS.min, children))
+      : Math.max(0, children);
   const totalMembers = safeAdults + safeChildren;
   const baseLabel = travelers === "family" ? "Family" : "Friends";
 
@@ -384,8 +417,10 @@ export default function CreateTripPage() {
       return;
     }
     if (requiresMemberBreakdown) {
-      const minAdults = travelers === "family" ? 4 : 8;
-      const maxAdults = travelers === "family" ? 7 : 15;
+      const minAdults =
+        travelers === "family" ? FAMILY_ADULT_LIMITS.min : FRIENDS_ADULT_LIMITS.min;
+      const maxAdults =
+        travelers === "family" ? FAMILY_ADULT_LIMITS.max : FRIENDS_ADULT_LIMITS.max;
 
       if (!Number.isInteger(adults) || adults < minAdults || adults > maxAdults) {
         const message = `Adults must be between ${minAdults} and ${maxAdults}`;
@@ -394,9 +429,13 @@ export default function CreateTripPage() {
         return;
       }
 
-      if (!Number.isInteger(children) || children < 0) {
-        setTravelerError("Children must be 0 or more");
-        toast.error("Invalid travelers", { description: "Children must be 0 or more" });
+      if (!Number.isInteger(children) || children < 0 || (travelers === "family" && children > 5)) {
+        const message =
+          travelers === "family"
+            ? `Children must be between ${FAMILY_CHILD_LIMITS.min} and ${FAMILY_CHILD_LIMITS.max}`
+            : "Children must be 0 or more";
+        setTravelerError(message);
+        toast.error("Invalid travelers", { description: message });
         return;
       }
     }
@@ -436,10 +475,12 @@ export default function CreateTripPage() {
       setTripResult(response.trip);
       toast.success("Trip generated successfully");
     } catch (err: any) {
+      const description = normalizeTravelerErrorMessage(
+        err?.message ||
+          "The trip is taking longer than expected. Please wait a moment and try again."
+      );
       toast.error("Failed to generate trip", {
-        description:
-          err?.message ||
-          "The trip is taking longer than expected. Please wait a moment and try again.",
+        description,
       });
     } finally {
       setLoading(false);
@@ -761,7 +802,14 @@ export default function CreateTripPage() {
               selected={travelers === "family"}
               onClick={() => {
                 setTravelers("family");
-                setAdults((current) => (current >= 4 && current <= 7 ? current : 4));
+                setAdults((current) =>
+                  current >= FAMILY_ADULT_LIMITS.min && current <= FAMILY_ADULT_LIMITS.max
+                    ? current
+                    : FAMILY_ADULT_LIMITS.min
+                );
+                setChildren((current) =>
+                  current <= FAMILY_CHILD_LIMITS.max ? current : FAMILY_CHILD_LIMITS.max
+                );
                 setTravelerError("");
               }}
             />
@@ -772,7 +820,11 @@ export default function CreateTripPage() {
               selected={travelers === "friends"}
               onClick={() => {
                 setTravelers("friends");
-                setAdults((current) => (current >= 8 && current <= 15 ? current : 8));
+                setAdults((current) =>
+                  current >= FRIENDS_ADULT_LIMITS.min && current <= FRIENDS_ADULT_LIMITS.max
+                    ? current
+                    : FRIENDS_ADULT_LIMITS.min
+                );
                 setTravelerError("");
               }}
             />
@@ -784,8 +836,8 @@ export default function CreateTripPage() {
                   <label className="text-sm font-medium text-gray-700">Adults</label>
                   <input
                     type="number"
-                    min={travelers === "family" ? 4 : 8}
-                    max={travelers === "family" ? 7 : 15}
+                    min={travelers === "family" ? FAMILY_ADULT_LIMITS.min : FRIENDS_ADULT_LIMITS.min}
+                    max={travelers === "family" ? FAMILY_ADULT_LIMITS.max : FRIENDS_ADULT_LIMITS.max}
                     value={adults}
                     onChange={(e) => {
                       setAdults(Number(e.target.value));
@@ -798,7 +850,8 @@ export default function CreateTripPage() {
                   <label className="text-sm font-medium text-gray-700">Children</label>
                   <input
                     type="number"
-                    min={0}
+                    min={FAMILY_CHILD_LIMITS.min}
+                    max={travelers === "family" ? FAMILY_CHILD_LIMITS.max : undefined}
                     value={children}
                     onChange={(e) => {
                       setChildren(Number(e.target.value));

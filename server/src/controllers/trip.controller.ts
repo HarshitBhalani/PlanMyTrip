@@ -20,6 +20,10 @@ type TravelerDetails = {
   label: string;
 };
 
+const FAMILY_ADULT_LIMITS = { min: 2, max: 7 } as const;
+const FAMILY_CHILD_LIMITS = { min: 0, max: 5 } as const;
+const FRIENDS_ADULT_LIMITS = { min: 8, max: 15 } as const;
+
 const sanitizeTripData = (tripData: any) => {
   if (!tripData || typeof tripData !== "object") {
     return tripData;
@@ -86,8 +90,14 @@ const getTravelerDetails = (
     };
   }
 
-  const adults = Math.max(1, Math.floor(Number(adultsInput) || 0));
-  const children = Math.max(0, Math.floor(Number(childrenInput) || 0));
+  const adults =
+    travelers === "family"
+      ? Math.max(FAMILY_ADULT_LIMITS.min, Math.floor(Number(adultsInput) || 0))
+      : Math.max(1, Math.floor(Number(adultsInput) || 0));
+  const children =
+    travelers === "family"
+      ? Math.min(FAMILY_CHILD_LIMITS.max, Math.max(FAMILY_CHILD_LIMITS.min, Math.floor(Number(childrenInput) || 0)))
+      : Math.max(0, Math.floor(Number(childrenInput) || 0));
   const totalMembers = adults + children;
   const groupLabel = travelers === "family" ? "Family" : "Friends";
 
@@ -97,6 +107,49 @@ const getTravelerDetails = (
     totalMembers,
     label: `${groupLabel}, ${totalMembers} member${totalMembers === 1 ? "" : "s"}`,
   };
+};
+
+const validateTravelerCounts = (
+  travelers: string,
+  adultsInput?: number,
+  childrenInput?: number
+) => {
+  const adults = Math.floor(Number(adultsInput));
+  const children = Math.floor(Number(childrenInput));
+
+  if (travelers === "family") {
+    if (
+      !Number.isInteger(adults) ||
+      adults < FAMILY_ADULT_LIMITS.min ||
+      adults > FAMILY_ADULT_LIMITS.max
+    ) {
+      return `Adults must be between ${FAMILY_ADULT_LIMITS.min} and ${FAMILY_ADULT_LIMITS.max}`;
+    }
+
+    if (
+      !Number.isInteger(children) ||
+      children < FAMILY_CHILD_LIMITS.min ||
+      children > FAMILY_CHILD_LIMITS.max
+    ) {
+      return `Children must be between ${FAMILY_CHILD_LIMITS.min} and ${FAMILY_CHILD_LIMITS.max}`;
+    }
+  }
+
+  if (travelers === "friends") {
+    if (
+      !Number.isInteger(adults) ||
+      adults < FRIENDS_ADULT_LIMITS.min ||
+      adults > FRIENDS_ADULT_LIMITS.max
+    ) {
+      return `Adults must be between ${FRIENDS_ADULT_LIMITS.min} and ${FRIENDS_ADULT_LIMITS.max}`;
+    }
+
+    if (!Number.isInteger(children) || children < 0) {
+      return "Children must be 0 or more";
+    }
+  }
+
+  return null;
 };
 
 const getDestinationCostFactor = (destination: string) => {
@@ -1120,6 +1173,19 @@ export const generateTrip = async (req: any, res: Response) => {
     });
 
     const finalBudget = preferences?.budgetRange || budgetType;
+    const travelerValidationMessage = validateTravelerCounts(
+      travelers,
+      Number(adults),
+      Number(children)
+    );
+
+    if (travelerValidationMessage) {
+      return res.status(400).json({
+        success: false,
+        message: travelerValidationMessage,
+      });
+    }
+
     const travelerDetails = getTravelerDetails(travelers, Number(adults), Number(children));
 
     const requestedDays = Number(days);
@@ -1336,6 +1402,19 @@ export const saveTrip = async (req: any, res: Response) => {
       return res.status(400).json({
         success: false,
         message: "Missing required fields",
+      });
+    }
+
+    const travelerValidationMessage = validateTravelerCounts(
+      travelers,
+      Number(adults),
+      Number(children)
+    );
+
+    if (travelerValidationMessage) {
+      return res.status(400).json({
+        success: false,
+        message: travelerValidationMessage,
       });
     }
 

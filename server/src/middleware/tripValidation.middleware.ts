@@ -8,6 +8,9 @@ const ALLOWED_BUDGET_TYPES = new Set(["cheap", "moderate", "luxury"]);
 const ALLOWED_TRAVELERS = new Set(["solo", "couple", "friends", "family"]);
 const MAX_GENERATE_TRIP_BODY_BYTES = 10 * 1024;
 const MAX_GENERATE_TRIP_BODY_CHARS = 2000;
+const FAMILY_ADULT_LIMITS = { min: 2, max: 7 } as const;
+const FAMILY_CHILD_LIMITS = { min: 0, max: 5 } as const;
+const FRIENDS_ADULT_LIMITS = { min: 8, max: 15 } as const;
 export const validateGenerateTripRequest = (
   req: Request,
   res: Response,
@@ -99,8 +102,10 @@ export const validateGenerateTripRequest = (
     children === undefined || children === null || children === "" ? 0 : Number(children);
 
   if ((travelers === "family" || travelers === "friends")) {
-    const minAdults = travelers === "family" ? 4 : 8;
-    const maxAdults = travelers === "family" ? 7 : 15;
+    const minAdults =
+      travelers === "family" ? FAMILY_ADULT_LIMITS.min : FRIENDS_ADULT_LIMITS.min;
+    const maxAdults =
+      travelers === "family" ? FAMILY_ADULT_LIMITS.max : FRIENDS_ADULT_LIMITS.max;
 
     if (!Number.isInteger(parsedAdults) || parsedAdults < minAdults || parsedAdults > maxAdults) {
       return res.status(400).json({
@@ -109,10 +114,17 @@ export const validateGenerateTripRequest = (
       });
     }
 
-    if (!Number.isInteger(parsedChildren) || parsedChildren < 0) {
+    if (
+      !Number.isInteger(parsedChildren) ||
+      parsedChildren < 0 ||
+      (travelers === "family" && parsedChildren > FAMILY_CHILD_LIMITS.max)
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Children must be an integer greater than or equal to 0",
+        message:
+          travelers === "family"
+            ? `Children must be an integer between ${FAMILY_CHILD_LIMITS.min} and ${FAMILY_CHILD_LIMITS.max}`
+            : "Children must be an integer greater than or equal to 0",
       });
     }
   }
