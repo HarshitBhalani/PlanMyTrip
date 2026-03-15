@@ -6,8 +6,11 @@ Full-stack AI trip planning app with a Next.js frontend and an Express + TypeScr
 
 - JWT-based signup and login
 - AI-generated itineraries with day-wise planning
+- Country selection through a separate interactive world map page
 - Single, two-destination, and three-destination trip support
 - Destination phase and travel-leg formatting for multi-stop trips
+- Exact day-count enforcement in generated itineraries
+- Country-aware itinerary generation with capital-city and tourism-cluster context
 - Family/friends group input with adult and child validation
 - Budget estimation based on trip type, members, days, destinations, and transfers
 - Saved trips with edit, delete, PDF download, and public sharing
@@ -18,6 +21,7 @@ Full-stack AI trip planning app with a Next.js frontend and an Express + TypeScr
 ## Tech Stack
 
 - Frontend: Next.js 16, React 19, TypeScript, Tailwind CSS
+- Map UI: `jsvectormap`
 - Backend: Node.js, Express 5, TypeScript, Mongoose
 - Database: MongoDB
 - AI: Groq
@@ -170,20 +174,37 @@ Base URL: `http://localhost:5000`
 1. User signs up or logs in.
 2. JWT token is stored in browser storage.
 3. User creates a trip with one to three destinations, days, budget type, and traveler type.
-4. For `family` and `friends`, the form also collects adult and child counts.
-5. Backend validates input, applies rate limits, and generates a structured AI itinerary.
-6. User can review the generated trip, then save it.
-7. Saved trips can be viewed, edited, deleted, downloaded as PDF, or shared via a public read-only link.
+4. User can also open a separate map page and choose a country directly from the world map.
+5. For `family` and `friends`, the form also collects adult and child counts.
+6. Backend validates input, applies rate limits, enriches country destinations with country/capital context, and generates a structured AI itinerary.
+7. Final itinerary is normalized to the exact requested number of days.
+8. User can review the generated trip, then save it.
+9. Saved trips can be viewed, edited, deleted, downloaded as PDF, or shared via a public read-only link.
 
 ## Multi-Destination Behavior
 
 - Maximum 3 destinations per trip
 - Total trip days remain fixed across all destinations
+- Destination cards and itinerary length are normalized to the exact requested day count
 - AI itinerary separates:
   - destination phases
   - travel phases
   - destination-to-destination transitions
 - Travel leg details include approximate distance and duration when available
+
+## Map Destination Flow
+
+- `/map` provides a separate world-map destination picker
+- Country selection from the map is passed back into the create-trip form
+- The current map flow is country-only selection
+- Selected country names are normalized to full readable names such as `India`, `Portugal`, or `Greenland`
+
+## Country-Aware Itinerary Logic
+
+- If a selected destination is a full country, the backend tries to fetch country metadata such as capital, region, and population
+- The trip-generation prompt uses this country context to steer itineraries toward real capital-city and tourism clusters
+- Country itineraries are rewritten when the AI response is too generic or repetitive
+- This improves plans for destinations such as Portugal, Russia, and other country-level selections from the map
 
 ## Saved Trip Features
 

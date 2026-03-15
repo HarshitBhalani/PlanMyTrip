@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, PlusCircle, X } from "lucide-react";
+import { Loader2, Map, PlusCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest } from "../lib/api";
 import {
@@ -265,8 +266,33 @@ export default function CreateTripPage() {
   useEffect(() => {
     const preSelectedDestination = localStorage.getItem("preSelectedDestination");
     if (!preSelectedDestination) return;
+
+    const preSelectedMeta = localStorage.getItem("preSelectedDestinationMeta");
     setDestination(preSelectedDestination);
     localStorage.removeItem("preSelectedDestination");
+    localStorage.removeItem("preSelectedDestinationMeta");
+
+    if (preSelectedMeta) {
+      try {
+        const parsedMeta = JSON.parse(preSelectedMeta) as {
+          mode?: "state" | "country";
+          country?: string;
+          state?: string;
+        };
+        const description =
+          parsedMeta.mode === "state" && parsedMeta.state && parsedMeta.country
+            ? `${parsedMeta.state}, ${parsedMeta.country} selected from map`
+            : parsedMeta.country
+              ? `${parsedMeta.country} selected from map`
+              : undefined;
+
+        toast.success(`Destination set to ${preSelectedDestination}!`, { description });
+        return;
+      } catch {
+        // Fall back to the default success message if stored metadata is malformed.
+      }
+    }
+
     toast.success(`Destination set to ${preSelectedDestination}!`);
   }, []);
 
@@ -609,7 +635,7 @@ export default function CreateTripPage() {
         <div className="space-y-4">
           <div>
             <label className="font-semibold block mb-2 text-gray-900">Destination</label>
-            <div className="flex items-start gap-3">
+            <div className="flex flex-wrap items-start gap-3">
               <div className="flex-1">
                 <input
                   value={destination}
@@ -626,6 +652,13 @@ export default function CreateTripPage() {
                   <p className="mt-1.5 text-sm text-red-500">{destinationErrors.destination}</p>
                 )}
               </div>
+              <Link
+                href="/map"
+                className="inline-flex h-[50px] items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 transition hover:border-gray-500 hover:bg-gray-50"
+              >
+                <Map className="h-4 w-4" />
+                Choose on map
+              </Link>
               {!showSecondDestination && (
                 <button
                   type="button"

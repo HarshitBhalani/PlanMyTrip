@@ -17,6 +17,14 @@ const BLOCKED_WORDS = [
 export const normalizeDestination = (value: string) =>
   value.trim().replace(/\s+/g, " ");
 
+export const sanitizeMapDestination = (value: string) =>
+  normalizeDestination(
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z\s]/g, " ")
+  );
+
 export const isDuplicateDestination = (first: string, second: string) =>
   normalizeDestination(first).toLowerCase() ===
   normalizeDestination(second).toLowerCase();

@@ -12,6 +12,10 @@ import {
   estimateTravelBetweenDestinations,
   TravelEstimate,
 } from "../utils/distance";
+import {
+  CountryTravelContext,
+  getCountryTravelContext,
+} from "../utils/country-context";
 
 type TravelerDetails = {
   adults: number;
@@ -508,11 +512,56 @@ const createFallbackDestinationDay = (destination: string, localDayNumber: numbe
   localTravelTip: `Keep local transport flexible and leave buffer time around major attractions in ${destination}.`,
 });
 
+const reduceRepeatedDestinationDays = (
+  itinerary: ReturnType<typeof normalizeItinerary>,
+  groupedPlaces: Record<string, string[]>
+) =>
+  itinerary.map((day, index) => {
+    if (day.phaseType !== "destination" || !day.destination) {
+      return day;
+    }
+
+    const previousDay = itinerary[index - 1];
+    const isRepeatedDay =
+      previousDay?.phaseType === "destination" &&
+      previousDay.destination === day.destination &&
+      previousDay.morning.trim().toLowerCase() === day.morning.trim().toLowerCase() &&
+      previousDay.afternoon.trim().toLowerCase() === day.afternoon.trim().toLowerCase() &&
+      previousDay.evening.trim().toLowerCase() === day.evening.trim().toLowerCase();
+
+    if (!isRepeatedDay) {
+      return day;
+    }
+
+    const places = groupedPlaces[day.destination] || [];
+    const primaryPlace = places[(index - 1) % Math.max(places.length, 1)] || `a different area of ${day.destination}`;
+    const secondaryPlace = places[index % Math.max(places.length, 1)] || `another popular zone in ${day.destination}`;
+    const eveningPlace =
+      places[(index + 1) % Math.max(places.length, 1)] || `a lively local neighborhood in ${day.destination}`;
+
+    return {
+      ...day,
+      phaseTitle: `${day.destination} - Day ${day.day}`,
+      morning: `Start the day around ${primaryPlace} and focus on a different side of ${day.destination}.`,
+      afternoon: `Continue with ${secondaryPlace} and nearby local highlights to keep the plan distinct from earlier days.`,
+      evening: `Spend the evening around ${eveningPlace} and try a regional meal with a more relaxed pace.`,
+      localTravelTip: `Cluster day ${day.day} activities in one part of ${day.destination} so the schedule feels varied without wasting transit time.`,
+    };
+  });
+
 type TravelSegmentContext = {
   durationMinutes?: number;
   durationText?: string;
   distanceText?: string;
 } | null;
+
+type CountryInsight = {
+  destination: string;
+  capitalFocus: string;
+  cityClusters: string[];
+  landmarkClusters: string[];
+  cuisineFocus: string[];
+};
 
 const mentionsDestination = (value: string, destination: string) => {
   const normalizedValue = value.trim().toLowerCase();
@@ -520,6 +569,177 @@ const mentionsDestination = (value: string, destination: string) => {
 
   return Boolean(normalizedDestination) && normalizedValue.includes(normalizedDestination);
 };
+
+const buildCountryInsightPrompt = (context: CountryTravelContext) => `
+Return valid JSON only.
+No markdown.
+No explanation.
+
+You are preparing accurate country trip-planning inputs for ${context.countryName}.
+
+Known facts:
+- Country: ${context.countryName}
+- Capital: ${context.capital.join(", ") || "Unknown"}
+- Region: ${context.region || "Unknown"}
+- Subregion: ${context.subregion || "Unknown"}
+
+Return JSON in this exact format:
+{
+  "destination": "${context.destination}",
+  "capitalFocus": "",
+  "cityClusters": [],
+  "landmarkClusters": [],
+  "cuisineFocus": []
+}
+
+Rules:
+- cityClusters must contain 4 to 6 real and famous city or region clusters for tourism in ${context.countryName}
+- landmarkClusters must contain 4 to 8 real and famous sightseeing areas, routes, districts, monuments, coastlines, parks, or cultural zones
+- cuisineFocus must contain 3 to 6 real local food or meal ideas
+- Prefer the capital city as one important cluster but do not make everything about the capital
+- Avoid generic phrases like "local attractions" or "popular places"
+`;
+
+const dedupeStrings = (values: string[]) =>
+  Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+
+const normalizeCountryInsight = (
+  value: unknown,
+  context: CountryTravelContext
+): CountryInsight => {
+  const objectValue = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
+  return {
+    destination: context.destination,
+    capitalFocus:
+      typeof objectValue.capitalFocus === "string" && objectValue.capitalFocus.trim()
+        ? objectValue.capitalFocus.trim()
+        : context.capital[0] || context.countryName,
+    cityClusters: dedupeStrings(
+      Array.isArray(objectValue.cityClusters)
+        ? objectValue.cityClusters.map((item) => (typeof item === "string" ? item : ""))
+        : context.capital
+    ),
+    landmarkClusters: dedupeStrings(
+      Array.isArray(objectValue.landmarkClusters)
+        ? objectValue.landmarkClusters.map((item) => (typeof item === "string" ? item : ""))
+        : []
+    ),
+    cuisineFocus: dedupeStrings(
+      Array.isArray(objectValue.cuisineFocus)
+        ? objectValue.cuisineFocus.map((item) => (typeof item === "string" ? item : ""))
+        : []
+    ),
+  };
+};
+
+const isGenericCountryDay = (day: ReturnType<typeof normalizeItinerary>[number], destination: string) => {
+  const destinationName = normalizeDestination(destination).toLowerCase();
+  const combinedText = [
+    day.phaseTitle,
+    day.morning,
+    day.afternoon,
+    day.evening,
+    day.localTravelTip,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    combinedText.includes(`main highlights of ${destinationName}`) ||
+    combinedText.includes(`continue sightseeing around ${destinationName}`) ||
+    combinedText.includes(`different area of ${destinationName}`) ||
+    combinedText.includes(`another popular zone in ${destinationName}`) ||
+    combinedText.includes(`lively local neighborhood in ${destinationName}`)
+  );
+};
+
+const buildCountrySpecificDay = ({
+  day,
+  insight,
+  destination,
+  dayIndex,
+}: {
+  day: ReturnType<typeof normalizeItinerary>[number];
+  insight: CountryInsight;
+  destination: string;
+  dayIndex: number;
+}) => {
+  const cityClusters = insight.cityClusters.length
+    ? insight.cityClusters
+    : [insight.capitalFocus || destination];
+  const landmarkClusters = insight.landmarkClusters.length
+    ? insight.landmarkClusters
+    : [`major landmarks in ${insight.capitalFocus || destination}`];
+  const cuisineFocus = insight.cuisineFocus.length
+    ? insight.cuisineFocus
+    : ["regional specialties"];
+  const cityFocus = cityClusters[dayIndex % cityClusters.length];
+  const secondaryFocus = cityClusters[(dayIndex + 1) % cityClusters.length] || cityFocus;
+  const landmarkFocus = landmarkClusters[dayIndex % landmarkClusters.length];
+  const secondaryLandmark =
+    landmarkClusters[(dayIndex + 1) % landmarkClusters.length] || landmarkFocus;
+  const foodFocus = cuisineFocus[dayIndex % cuisineFocus.length];
+
+  return {
+    ...day,
+    phaseTitle: `${destination} - Day ${day.day}`,
+    morning: `Focus on ${cityFocus}, starting with ${landmarkFocus} and nearby signature sights.`,
+    afternoon: `Continue through ${secondaryFocus} with time for ${secondaryLandmark} and a more local neighborhood experience.`,
+    evening: `Keep the evening around ${cityFocus} or ${secondaryFocus} and try ${foodFocus} for a destination-specific finish.`,
+    localTravelTip: `Group day ${day.day} around ${cityFocus} and ${secondaryFocus} so you cover famous places in ${destination} without wasting transit time.`,
+  };
+};
+
+const improveCountryItinerary = ({
+  itinerary,
+  countryInsights,
+  destinations,
+}: {
+  itinerary: ReturnType<typeof normalizeItinerary>;
+  countryInsights: Record<string, CountryInsight>;
+  destinations: string[];
+}) =>
+  itinerary.map((day, index) => {
+    if (day.phaseType !== "destination" || !day.destination) {
+      return day;
+    }
+
+    const destination = destinations.find((item) => areSameDestination(item, day.destination));
+    if (!destination) {
+      return day;
+    }
+
+    const insight = countryInsights[destination];
+    if (!insight) {
+      return day;
+    }
+
+    const previousDay = itinerary[index - 1];
+    const isRepeatedDay =
+      previousDay?.phaseType === "destination" &&
+      previousDay.destination === day.destination &&
+      previousDay.morning.trim().toLowerCase() === day.morning.trim().toLowerCase() &&
+      previousDay.afternoon.trim().toLowerCase() === day.afternoon.trim().toLowerCase() &&
+      previousDay.evening.trim().toLowerCase() === day.evening.trim().toLowerCase();
+
+    if (!isRepeatedDay && !isGenericCountryDay(day, destination)) {
+      return day;
+    }
+
+    const sameDestinationIndex = itinerary
+      .slice(0, index + 1)
+      .filter(
+        (item) => item.phaseType === "destination" && areSameDestination(item.destination || "", destination)
+      ).length - 1;
+
+    return buildCountrySpecificDay({
+      day,
+      insight,
+      destination,
+      dayIndex: Math.max(sameDestinationIndex, 0),
+    });
+  });
 
 const buildDestinationKeywordMap = (
   destinations: string[],
@@ -789,15 +1009,12 @@ const normalizeItineraryLength = (
 
   while (normalized.length < requestedDays) {
     const nextDayNumber = normalized.length + 1;
-    const previousDay = normalized[normalized.length - 1];
 
     normalized.push({
       day: nextDayNumber,
-      phaseType: previousDay?.phaseType || "destination",
-      phaseTitle:
-        previousDay?.phaseTitle ||
-        `${fallbackDestination} Stay`,
-      destination: previousDay?.destination || fallbackDestination,
+      phaseType: "destination",
+      phaseTitle: `${fallbackDestination} - Day ${nextDayNumber}`,
+      destination: fallbackDestination,
       morning: "Continue local sightseeing and relaxed family-friendly activities.",
       afternoon: "Explore nearby highlights and enjoy a balanced outing.",
       evening: "Keep the evening light with local food and rest.",
@@ -829,10 +1046,7 @@ const normalizeDestinations = (
 
     return {
       name: fallbackName,
-      stayDays:
-        typeof item?.stayDays === "string" && item.stayDays.trim()
-          ? item.stayDays.trim()
-          : `${dayPlan[index] || 1} day${dayPlan[index] === 1 ? "" : "s"}`,
+      stayDays: `${dayPlan[index] || 1} day${dayPlan[index] === 1 ? "" : "s"}`,
       summary:
         typeof item?.summary === "string" && item.summary.trim()
           ? item.summary.trim()
@@ -944,12 +1158,16 @@ const buildPrompt = ({
   travelers,
   travelerDetails,
   travelEstimates,
+  countryContexts,
+  countryInsights,
 }: {
   destinations: string[];
   days: number;
   travelers: string;
   travelerDetails: TravelerDetails;
   travelEstimates: Array<TravelEstimate | null>;
+  countryContexts: CountryTravelContext[];
+  countryInsights: Record<string, CountryInsight>;
 }) => {
   const dayPlan = buildDestinationDayPlan(days, destinations.length);
   const destinationList = destinations
@@ -964,11 +1182,32 @@ const buildPrompt = ({
                 estimate?.distanceText || "Unavailable"
               } | Duration: ${estimate?.durationText || "Unavailable"}`
           )
+	          .join("\n")
+	      : "- Travel legs: None";
+  const countryContextList =
+    countryContexts.length > 0
+      ? countryContexts
+          .map((context) => {
+            const capitalText = context.capital.length
+              ? context.capital.join(", ")
+              : "Unknown";
+
+            return `- ${context.destination}: country=${context.countryName}; capital=${capitalText}; region=${context.region || "Unknown"}; subregion=${context.subregion || "Unknown"}; population=${context.population || "Unknown"}`;
+          })
           .join("\n")
-      : "- Travel legs: None";
+      : "- No destination was confirmed as a full country.";
+  const countryInsightList =
+    Object.values(countryInsights).length > 0
+      ? Object.values(countryInsights)
+          .map(
+            (insight) =>
+              `- ${insight.destination}: capitalFocus=${insight.capitalFocus}; cityClusters=${insight.cityClusters.join(" | ")}; landmarkClusters=${insight.landmarkClusters.join(" | ")}; cuisineFocus=${insight.cuisineFocus.join(" | ")}`
+          )
+          .join("\n")
+      : "- No additional country insights available.";
 
   return `
-You are a PROFESSIONAL INDIAN TRAVEL PLANNER AI.
+You are a PROFESSIONAL GLOBAL TRAVEL PLANNER AI.
 
 CRITICAL RULES:
 - Input is ALWAYS travel destinations
@@ -978,6 +1217,8 @@ CRITICAL RULES:
 - Return ONLY valid JSON
 - No markdown
 - No explanations
+- The total itinerary length MUST be exactly ${days} days
+- The destination stay allocation MUST exactly match this day split: ${dayPlan.join(", ")}
 - The itinerary day count must be EXACTLY ${days}
 - If there are multiple destinations, create ONE combined ${days}-day itinerary
 - Distribute the ${days} days across all destinations while keeping the split balanced and practical for families and moderate budgets
@@ -1000,6 +1241,12 @@ CRITICAL RULES:
 - Do not create extra days beyond the total count
 - Do not skip any destination
 - Do not give all days to the first destination
+- When a destination is a COUNTRY, build the itinerary around its real capital city, major tourism cities, and famous regions
+- If the destination is a country, mention its capital city in the itinerary or highlights
+- For country itineraries, spread days across distinct cities/areas/attraction clusters; do not repeat the same day plan across multiple days
+- Consecutive days must feel meaningfully different in city focus, neighborhood focus, or attraction mix
+- Avoid repetitive loops like using the same palace, same square, same beach, or same dinner idea on multiple days unless the trip explicitly stays in one small place
+- Portugal must feel like Portugal, Japan must feel like Japan, Greenland must feel like Greenland, etc.
 
 Trip Input:
 - Destination Count: ${destinations.length}
@@ -1010,6 +1257,10 @@ ${destinationList}
 - Party Details: ${travelerDetails.label} (${travelerDetails.adults} adults, ${travelerDetails.children} children)
 - Travel Legs:
 ${travelLegList}
+- Confirmed Country Context:
+${countryContextList}
+- Destination Planning Insights:
+${countryInsightList}
 
 Return JSON EXACTLY in this format:
 {
@@ -1210,6 +1461,22 @@ export const generateTrip = async (req: any, res: Response) => {
     );
     const perDayCost = budgetEstimate.perDayCost;
     const totalCost = budgetEstimate.totalCost;
+    const countryContexts = (
+      await Promise.all(destinations.map((item) => getCountryTravelContext(item)))
+    ).filter((item): item is CountryTravelContext => Boolean(item?.isCountry));
+    const countryInsights = (
+      await Promise.all(
+        countryContexts.map(async (context) => {
+          const insightText = await generateTripWithAI(buildCountryInsightPrompt(context));
+          const parsedInsight = insightText ? parseAiJson(insightText) : null;
+
+          return [context.destination, normalizeCountryInsight(parsedInsight, context)] as const;
+        })
+      )
+    ).reduce<Record<string, CountryInsight>>((accumulator, [destination, insight]) => {
+      accumulator[destination] = insight;
+      return accumulator;
+    }, {});
 
     const prompt = buildPrompt({
       destinations,
@@ -1217,6 +1484,8 @@ export const generateTrip = async (req: any, res: Response) => {
       travelers,
       travelerDetails,
       travelEstimates,
+      countryContexts,
+      countryInsights,
     });
 
     const aiText = await generateTripWithAI(prompt);
@@ -1299,12 +1568,16 @@ ${extractJsonCandidate(aiText)}
     });
     const normalizedPlacesToVisit = normalizePlacesToVisit(aiTrip.placesToVisit);
     const groupedPlaces = groupItemsByDestination(normalizedPlacesToVisit, destinations);
-    const normalizedItinerary = buildStructuredItinerary({
+    const normalizedItinerary = improveCountryItinerary({
+      itinerary: reduceRepeatedDestinationDays(buildStructuredItinerary({
       itinerary: normalizeItinerary(aiTrip.itinerary),
       destinations,
       travelSegments: normalizedTravelSegments,
       dayPlan,
       groupedPlaces,
+    }), groupedPlaces),
+      countryInsights,
+      destinations,
     });
 
     return res.status(200).json({
