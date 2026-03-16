@@ -7,6 +7,12 @@ import { Loader2, Map, PlusCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest } from "../lib/api";
 import {
+  clearPendingTripDraft,
+  getPendingTripDraft,
+  savePendingTripDraft,
+  savePostAuthRedirect,
+} from "../lib/pending-trip";
+import {
   isDuplicateDestination,
   normalizeDestination,
   validateDestination,
@@ -222,7 +228,7 @@ export default function CreateTripPage() {
   const [thirdDestination, setThirdDestination] = useState("");
   const [days, setDays] = useState<number | "">("");
   const [budgetType, setBudgetType] = useState("moderate");
-  const [travelers, setTravelers] = useState("friends");
+  const [travelers, setTravelers] = useState("couple");
   const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -240,6 +246,25 @@ export default function CreateTripPage() {
   const [daysError, setDaysError] = useState("");
   const [travelerError, setTravelerError] = useState("");
   const [generationElapsedSeconds, setGenerationElapsedSeconds] = useState(0);
+  const [hasLoadedDraft, setHasLoadedDraft] = useState(false);
+
+  const resetTripForm = () => {
+    setDestination("");
+    setShowSecondDestination(false);
+    setSecondDestination("");
+    setShowThirdDestination(false);
+    setThirdDestination("");
+    setDays("");
+    setBudgetType("moderate");
+    setTravelers("couple");
+    setAdults(2);
+    setChildren(0);
+    setTravelPreviews([]);
+    setDaysError("");
+    setTravelerError("");
+    setDestinationErrors({});
+    clearPendingTripDraft();
+  };
 
   useEffect(() => {
     if (!loading) {
@@ -264,37 +289,84 @@ export default function CreateTripPage() {
   const travelerConfig = getTravelerConfig(travelers, adults, children);
 
   useEffect(() => {
+    const pendingDraft = getPendingTripDraft();
+
+    if (pendingDraft) {
+      setDestination(pendingDraft.destination || "");
+      setShowSecondDestination(pendingDraft.showSecondDestination);
+      setSecondDestination(pendingDraft.secondDestination || "");
+      setShowThirdDestination(pendingDraft.showThirdDestination);
+      setThirdDestination(pendingDraft.thirdDestination || "");
+      setDays(pendingDraft.days);
+      setBudgetType(pendingDraft.budgetType || "moderate");
+      setTravelers(pendingDraft.travelers || "couple");
+      setAdults(typeof pendingDraft.adults === "number" ? pendingDraft.adults : 2);
+      setChildren(typeof pendingDraft.children === "number" ? pendingDraft.children : 0);
+    }
+
     const preSelectedDestination = localStorage.getItem("preSelectedDestination");
-    if (!preSelectedDestination) return;
+    if (preSelectedDestination && !(pendingDraft?.destination || "").trim()) {
+      const preSelectedMeta = localStorage.getItem("preSelectedDestinationMeta");
+      setDestination(preSelectedDestination);
 
-    const preSelectedMeta = localStorage.getItem("preSelectedDestinationMeta");
-    setDestination(preSelectedDestination);
-    localStorage.removeItem("preSelectedDestination");
-    localStorage.removeItem("preSelectedDestinationMeta");
+      if (preSelectedMeta) {
+        try {
+          const parsedMeta = JSON.parse(preSelectedMeta) as {
+            mode?: "state" | "country";
+            country?: string;
+            state?: string;
+          };
+          const description =
+            parsedMeta.mode === "state" && parsedMeta.state && parsedMeta.country
+              ? `${parsedMeta.state}, ${parsedMeta.country} selected from map`
+              : parsedMeta.country
+                ? `${parsedMeta.country} selected from map`
+                : undefined;
 
-    if (preSelectedMeta) {
-      try {
-        const parsedMeta = JSON.parse(preSelectedMeta) as {
-          mode?: "state" | "country";
-          country?: string;
-          state?: string;
-        };
-        const description =
-          parsedMeta.mode === "state" && parsedMeta.state && parsedMeta.country
-            ? `${parsedMeta.state}, ${parsedMeta.country} selected from map`
-            : parsedMeta.country
-              ? `${parsedMeta.country} selected from map`
-              : undefined;
-
-        toast.success(`Destination set to ${preSelectedDestination}!`, { description });
-        return;
-      } catch {
-        // Fall back to the default success message if stored metadata is malformed.
+          toast.success(`Destination set to ${preSelectedDestination}!`, { description });
+        } catch {
+          toast.success(`Destination set to ${preSelectedDestination}!`);
+        }
+      } else {
+        toast.success(`Destination set to ${preSelectedDestination}!`);
       }
     }
 
-    toast.success(`Destination set to ${preSelectedDestination}!`);
+    localStorage.removeItem("preSelectedDestination");
+    localStorage.removeItem("preSelectedDestinationMeta");
+    setHasLoadedDraft(true);
   }, []);
+
+  useEffect(() => {
+    if (!hasLoadedDraft) {
+      return;
+    }
+
+    savePendingTripDraft({
+      destination,
+      showSecondDestination,
+      secondDestination,
+      showThirdDestination,
+      thirdDestination,
+      days,
+      budgetType,
+      travelers,
+      adults,
+      children,
+    });
+  }, [
+    hasLoadedDraft,
+    destination,
+    showSecondDestination,
+    secondDestination,
+    showThirdDestination,
+    thirdDestination,
+    days,
+    budgetType,
+    travelers,
+    adults,
+    children,
+  ]);
 
   useEffect(() => {
     const values = [
@@ -427,6 +499,19 @@ export default function CreateTripPage() {
 
     const token = localStorage.getItem("token");
     if (!token) {
+      savePendingTripDraft({
+        destination,
+        showSecondDestination,
+        secondDestination,
+        showThirdDestination,
+        thirdDestination,
+        days,
+        budgetType,
+        travelers,
+        adults,
+        children,
+      });
+      savePostAuthRedirect("/create-trip");
       toast.error("Authentication required", {
         description: "Please login or register to generate your trip",
         action: { label: "Login", onClick: () => router.push("/auth/login") },
@@ -499,6 +584,7 @@ export default function CreateTripPage() {
       );
       if (!response.success) throw new Error(response.message || "Trip generation failed");
       setTripResult(response.trip);
+      resetTripForm();
       toast.success("Trip generated successfully");
     } catch (err: any) {
       const description = normalizeTravelerErrorMessage(

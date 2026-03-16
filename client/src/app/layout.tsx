@@ -5,6 +5,11 @@ import { Sonner } from "../components/ui/sonner";
 export const metadata = {
   title: "PlanMyTrip",
   description: "Plan trips with AI - Your personal travel curator",
+  icons: {
+    icon: "/icon.png",
+    shortcut: "/icon.png",
+    apple: "/apple-icon.png",
+  },
 };
 
 export default function RootLayout({

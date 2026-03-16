@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Globe2, Loader2, MapPinned, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import { savePendingTripDestination } from "@/app/lib/pending-trip";
 import { sanitizeMapDestination } from "@/utils/destination";
 
 type SelectedPlace = {
@@ -156,6 +157,7 @@ export default function WorldMapPicker() {
     }
 
     localStorage.setItem("preSelectedDestination", chosenDestination);
+    savePendingTripDestination(chosenDestination);
     localStorage.setItem(
       "preSelectedDestinationMeta",
       JSON.stringify({
@@ -187,21 +189,6 @@ export default function WorldMapPicker() {
           This version uses a TailAdmin-style vector world map. Click a country and send that
           country directly to the create trip page.
         </p>
-
-        <div className="mt-6 space-y-3 rounded-3xl border border-gray-200 bg-gray-50 p-4">
-          <div className="flex items-center gap-3 text-sm text-gray-700">
-            <Globe2 className="h-4 w-4" />
-            <span>Drag, zoom, and click directly on a country region.</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm text-gray-700">
-            <MapPinned className="h-4 w-4" />
-            <span>Use the selected country directly as your destination.</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm text-gray-700">
-            <RotateCcw className="h-4 w-4" />
-            <span>Reset the map anytime and choose another country.</span>
-          </div>
-        </div>
 
         <div className="mt-6 space-y-4 rounded-3xl border border-gray-200 bg-white p-5">
           <p className="text-sm font-semibold text-gray-900">Selected location</p>
@@ -238,6 +225,21 @@ export default function WorldMapPicker() {
           >
             Reset map view
           </button>
+        </div>
+
+        <div className="mt-6 space-y-3 rounded-3xl border border-gray-200 bg-gray-50 p-4">
+          <div className="flex items-center gap-3 text-sm text-gray-700">
+            <Globe2 className="h-4 w-4" />
+            <span>Drag, zoom, and click directly on a country region.</span>
+          </div>
+          <div className="flex items-center gap-3 text-sm text-gray-700">
+            <MapPinned className="h-4 w-4" />
+            <span>Use the selected country directly as your destination.</span>
+          </div>
+          <div className="flex items-center gap-3 text-sm text-gray-700">
+            <RotateCcw className="h-4 w-4" />
+            <span>Reset the map anytime and choose another country.</span>
+          </div>
         </div>
       </aside>
 

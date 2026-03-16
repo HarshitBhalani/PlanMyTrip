@@ -16,7 +16,7 @@ export default function TripPreferenceModal({
 
   const [days, setDays] = useState(3);
   const [budget, setBudget] = useState("medium");
-  const [travelers, setTravelers] = useState("solo");
+  const [travelers, setTravelers] = useState("couple");
 
   const proceed = () => {
     router.push(

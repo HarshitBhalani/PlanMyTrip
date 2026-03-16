@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -14,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { savePendingTripDestination } from "./lib/pending-trip";
 
 export default function HomePage() {
   const router = useRouter();
@@ -252,6 +254,7 @@ export default function HomePage() {
 
   const handleDestinationClick = (destination: string) => {
     localStorage.setItem("preSelectedDestination", destination);
+    savePendingTripDestination(destination);
     router.push("/create-trip");
   };
 
@@ -304,94 +307,130 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-white">
       {/* Hero Section */}
-      <section className="flex flex-col items-center justify-center text-center min-h-[70vh] px-4 bg-gradient-to-b from-gray-50 to-white">
-        <h1 className="text-4xl md:text-5xl font-bold leading-tight max-w-3xl">
-          Discover Your Next Adventure with AI
-        </h1>
-        <p className="mt-6 text-lg text-gray-600 max-w-2xl">
-          Your personal trip planner and travel curator, creating custom
-          itineraries tailored to your interests, travel style, and budget
-          instantly.
-        </p>
-        <div className="mt-10 flex gap-4">
-          <Link
-            href="/create-trip"
-            className="px-6 py-3 rounded-lg bg-black text-white font-medium hover:bg-gray-800 transition"
-          >
-            Plan a Trip
-          </Link>
-          <Link
-            href="/auth/login"
-            className="px-6 py-3 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition"
-          >
-            Login
-          </Link>
-        </div>
+      <section className="overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.22),_transparent_30%),linear-gradient(180deg,_#fffaf0_0%,_#ffffff_45%,_#f8fafc_100%)] px-4 py-16 md:px-8 md:py-24">
+        <div className="mx-auto grid min-h-[70vh] max-w-7xl items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]">
+          <div>
+            <div className="inline-flex items-center gap-3 rounded-full border border-amber-200 bg-white/80 px-4 py-2 text-sm font-medium text-amber-800 shadow-sm backdrop-blur">
+              <Image
+                src="/logo.png"
+                alt="PlanMyTrip logo"
+                width={28}
+                height={28}
+                className="h-7 w-7 object-contain"
+                priority
+              />
+              AI trip planning for real travel decisions
+            </div>
 
-        {/* Features Grid */}
-        <div className="mt-14 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl">
-          <div className="p-6 rounded-xl bg-white shadow-md hover:shadow-lg transition-shadow">
-            <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3">
-              <svg
-                className="w-6 h-6 text-purple-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                />
-              </svg>
-            </div>
-            <h3 className="font-semibold text-lg">AI-Generated Itineraries</h3>
-            <p className="text-gray-600 mt-2 text-sm">
-              Get detailed day-wise travel plans created by AI in seconds.
+            <h1 className="mt-6 max-w-4xl text-4xl font-bold leading-tight text-gray-950 md:text-6xl">
+              Plan better trips without juggling blogs, tabs, and random notes.
+            </h1>
+
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-gray-600">
+              Tell the planner where you want to go, how long you have, your
+              budget, and who you&apos;re traveling with. It builds a practical,
+              day-wise itinerary with places to explore, stay, and organize next.
             </p>
+
+            <div className="mt-8 flex flex-col gap-4 sm:flex-row">
+              <Link
+                href="/create-trip"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-black px-6 py-3 text-base font-medium text-white transition hover:bg-gray-800"
+              >
+                Start Planning
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+              <Link
+                href="/auth/login"
+                className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-6 py-3 text-base font-medium text-gray-700 transition hover:bg-gray-50"
+              >
+                Login
+              </Link>
+            </div>
+
+            <div className="mt-10 grid max-w-2xl gap-4 sm:grid-cols-3">
+              <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+                <p className="text-2xl font-bold text-gray-950">Day-wise</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  Clear itineraries instead of vague suggestions.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+                <p className="text-2xl font-bold text-gray-950">Budget-fit</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  Plans shaped around your spending style.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-sm backdrop-blur">
+                <p className="text-2xl font-bold text-gray-950">Faster</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  Go from idea to trip outline in minutes.
+                </p>
+              </div>
+            </div>
           </div>
-          <div className="p-6 rounded-xl bg-white shadow-md hover:shadow-lg transition-shadow">
-            <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
-              <svg
-                className="w-6 h-6 text-orange-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
+
+          <div className="relative">
+            <div className="absolute -left-6 top-8 hidden h-24 w-24 rounded-full bg-amber-300/30 blur-2xl md:block" />
+            <div className="absolute -right-6 bottom-10 hidden h-32 w-32 rounded-full bg-sky-300/30 blur-2xl md:block" />
+
+            <div className="relative rounded-[28px] border border-gray-200 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
+              <div className="rounded-3xl bg-[linear-gradient(135deg,_#111827_0%,_#1f2937_45%,_#0f766e_100%)] p-6 text-white">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.24em] text-white/60">
+                      Sample trip
+                    </p>
+                    <h3 className="mt-2 text-2xl font-semibold">
+                      Goa, 4 days
+                    </h3>
+                  </div>
+                  <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-white/80">
+                    Couple - Mid-range
+                  </span>
+                </div>
+
+                <div className="mt-6 space-y-3">
+                  <div className="rounded-2xl bg-white/10 p-4">
+                    <p className="text-sm text-white/60">Day 1</p>
+                    <p className="mt-1 font-medium">
+                      Arrival, beach sunset, local cafe shortlist
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 p-4">
+                    <p className="text-sm text-white/60">Day 2</p>
+                    <p className="mt-1 font-medium">
+                      North Goa loop with food and nightlife stops
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 p-4">
+                    <p className="text-sm text-white/60">Day 3</p>
+                    <p className="mt-1 font-medium">
+                      Watersports, relaxed lunch, hidden beach recommendation
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+                  <p className="text-sm font-medium text-amber-900">
+                    What you control
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-amber-800">
+                    Destination, trip length, budget, interests, and travel group.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-sky-100 bg-sky-50 p-4">
+                  <p className="text-sm font-medium text-sky-900">
+                    What you get
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-sky-800">
+                    A usable trip draft you can save, revisit, and refine.
+                  </p>
+                </div>
+              </div>
             </div>
-            <h3 className="font-semibold text-lg">Personalized Preferences</h3>
-            <p className="text-gray-600 mt-2 text-sm">
-              Budget, pace, food, hotels - everything tailored to you.
-            </p>
-          </div>
-          <div className="p-6 rounded-xl bg-white shadow-md hover:shadow-lg transition-shadow">
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
-              <svg
-                className="w-6 h-6 text-blue-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
-                />
-              </svg>
-            </div>
-            <h3 className="font-semibold text-lg">Save & Revisit Trips</h3>
-            <p className="text-gray-600 mt-2 text-sm">
-              Access all your planned trips anytime from your dashboard.
-            </p>
           </div>
         </div>
       </section>

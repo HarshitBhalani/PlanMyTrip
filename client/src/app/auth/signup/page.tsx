@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiRequest } from "../../lib/api";
 import { saveAuth } from "../../lib/auth";
+import { consumePostAuthRedirect } from "../../lib/pending-trip";
 import { toast } from "sonner";
 
 export default function SignupPage() {
@@ -61,12 +63,13 @@ export default function SignupPage() {
 
       // ✅ Save token + user
       saveAuth(res.token, res.user);
+      const redirectPath = consumePostAuthRedirect() || "/create-trip";
 
       toast.success("Account created 🎉", {
         description: "Welcome! Redirecting to create trip...",
       });
 
-      router.push("/create-trip");
+      router.push(redirectPath);
     } catch (err: any) {
       toast.error("Signup failed", {
         description: err.message || "Something went wrong",
@@ -115,6 +118,13 @@ export default function SignupPage() {
           {loading ? "Creating account..." : "Sign Up"}
         </button>
       </form>
+
+      <p className="mt-4 text-center text-sm text-gray-600">
+        Already have an account?{" "}
+        <Link href="/auth/login" className="font-medium text-black underline">
+          Login
+        </Link>
+      </p>
     </div>
   );
 }
