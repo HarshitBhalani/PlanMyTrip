@@ -5,6 +5,7 @@ import { Download, Share2 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { apiRequest } from "../lib/api";
+import { getUser } from "../lib/auth";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
@@ -55,22 +56,7 @@ export default function SavedTripsPage() {
       ? localStorage.getItem("token")
       : null;
 
-  const userName =
-    typeof window !== "undefined"
-      ? (() => {
-          try {
-            const rawUser = localStorage.getItem("user");
-            if (!rawUser) {
-              return "user";
-            }
-
-            const parsedUser = JSON.parse(rawUser);
-            return parsedUser?.fullName || parsedUser?.name || "user";
-          } catch {
-            return "user";
-          }
-        })()
-      : "user";
+  const userName = getUser()?.fullName?.trim() || "user";
 
   useEffect(() => {
     fetchTrips();
@@ -337,6 +323,8 @@ export default function SavedTripsPage() {
         14,
         cursorY
       );
+      cursorY += 5;
+      pdf.text(`Downloaded by: ${userName}`, 14, cursorY);
       cursorY += 5;
       pdf.text(`Traveler: ${trip.travelerDetails?.label || trip.travelers || "-"}`, 14, cursorY);
       cursorY += 5;
