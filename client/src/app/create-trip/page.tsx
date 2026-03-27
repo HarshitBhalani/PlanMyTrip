@@ -82,6 +82,23 @@ type TripResult = {
   };
 };
 
+type GeneratedTripContext = {
+  destination: string;
+  secondDestination?: string;
+  thirdDestination?: string;
+  days: number;
+  budgetType: string;
+  travelers: string;
+  adults?: number;
+  children?: number;
+  travelerDetails: {
+    adults: number;
+    children: number;
+    totalMembers: number;
+    label: string;
+  };
+};
+
 const FAMILY_ADULT_LIMITS = {
   min: 2,
   max: 7,
@@ -233,6 +250,7 @@ export default function CreateTripPage() {
   const [children, setChildren] = useState(0);
   const [loading, setLoading] = useState(false);
   const [tripResult, setTripResult] = useState<TripResult | null>(null);
+  const [generatedTripContext, setGeneratedTripContext] = useState<GeneratedTripContext | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -564,6 +582,7 @@ export default function CreateTripPage() {
     setLoading(true);
     setGenerationElapsedSeconds(0);
     setTripResult(null);
+    setGeneratedTripContext(null);
     setIsSaved(false);
     setHasUnsavedChanges(false);
     try {
@@ -584,6 +603,17 @@ export default function CreateTripPage() {
       );
       if (!response.success) throw new Error(response.message || "Trip generation failed");
       setTripResult(response.trip);
+      setGeneratedTripContext({
+        destination: validation.cleanedDestinations[0],
+        secondDestination: validation.cleanedDestinations[1] || undefined,
+        thirdDestination: validation.cleanedDestinations[2] || undefined,
+        days: Number(days),
+        budgetType,
+        travelers,
+        adults: requiresMemberBreakdown ? adults : undefined,
+        children: requiresMemberBreakdown ? children : undefined,
+        travelerDetails: response.trip.travelerDetails || travelerConfig,
+      });
       resetTripForm();
       toast.success("Trip generated successfully");
     } catch (err: any) {
@@ -603,6 +633,12 @@ export default function CreateTripPage() {
     const token = localStorage.getItem("token");
     if (!token) { toast.error("Authentication required"); return; }
     if (!tripResult) { toast.error("No trip to save"); return; }
+    if (!generatedTripContext) {
+      toast.error("Trip details missing", {
+        description: "Please generate the trip again before saving.",
+      });
+      return;
+    }
     if (isSaved && !hasUnsavedChanges) {
       toast.info("Trip already saved", { description: "Make changes to save again" });
       return;
@@ -614,21 +650,15 @@ export default function CreateTripPage() {
         "POST",
         {
           tripData: tripResult,
-          destination: normalizeDestination(destination),
-          secondDestination:
-            showSecondDestination && secondDestination.trim()
-              ? normalizeDestination(secondDestination)
-              : undefined,
-          thirdDestination:
-            showThirdDestination && thirdDestination.trim()
-              ? normalizeDestination(thirdDestination)
-              : undefined,
-          days,
-          budgetType,
-          travelers,
-          travelerDetails: travelerConfig,
-          adults: requiresMemberBreakdown ? adults : undefined,
-          children: requiresMemberBreakdown ? children : undefined,
+          destination: generatedTripContext.destination,
+          secondDestination: generatedTripContext.secondDestination,
+          thirdDestination: generatedTripContext.thirdDestination,
+          days: generatedTripContext.days,
+          budgetType: generatedTripContext.budgetType,
+          travelers: generatedTripContext.travelers,
+          travelerDetails: generatedTripContext.travelerDetails,
+          adults: generatedTripContext.adults,
+          children: generatedTripContext.children,
         },
         token
       );
@@ -1240,24 +1270,27 @@ export default function CreateTripPage() {
           {tripResult.hotels && (
             <div>
               <h3 className="text-xl font-semibold mb-4 text-gray-900">Hotel Options</h3>
-              {tripResult.hotels.map((hotel, i) => (
-                <div key={i} className="border border-gray-200 p-4 rounded-xl mb-3 bg-white">
-                  <div className="flex justify-between items-center">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {tripResult.hotels.map((hotel, i) => (
+                  <div key={i} className="flex h-full flex-col justify-between rounded-xl border border-gray-200 bg-white p-4">
                     <div>
                       <p className="font-semibold text-gray-900 text-sm">{hotel.name}</p>
-                      <p className="text-sm text-gray-500 mt-0.5">{hotel.priceRangePerNight}</p>
+                      <p className="mt-1 text-xs font-medium uppercase tracking-[0.16em] text-gray-400">
+                        {hotel.category}
+                      </p>
+                      <p className="text-sm text-gray-500 mt-2">{hotel.priceRangePerNight}</p>
                     </div>
                     <a
                       href={hotel.bookingUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="bg-gray-900 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-gray-700 transition"
+                      className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-700"
                     >
                       Book
                     </a>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
 

@@ -16,6 +16,7 @@ import {
   CountryTravelContext,
   getCountryTravelContext,
 } from "../utils/country-context";
+import { getFallbackDestinationHighlights } from "../utils/destination-highlights";
 
 type TravelerDetails = {
   adults: number;
@@ -482,6 +483,37 @@ const groupItemsByDestination = (
   }, {});
 };
 
+const buildDestinationPlacePool = ({
+  placesToVisit,
+  destinationCards,
+  destinations,
+}: {
+  placesToVisit: Array<{ destination?: string; name?: string; description?: string } | null>;
+  destinationCards: unknown;
+  destinations: string[];
+}) => {
+  const groupedPlaces = groupItemsByDestination(placesToVisit, destinations);
+  const normalizedCards = Array.isArray(destinationCards) ? destinationCards : [];
+
+  return destinations.reduce<Record<string, string[]>>((accumulator, destination) => {
+    const matchingCard = normalizedCards.find(
+      (item: any) =>
+        typeof item?.name === "string" &&
+        areSameDestination(item.name, destination)
+    );
+    const cardHighlights = normalizeHighlights(matchingCard?.highlights);
+    const fallbackHighlights = getFallbackDestinationHighlights(destination);
+
+    accumulator[destination] = dedupeStrings([
+      ...(groupedPlaces[destination] || []),
+      ...cardHighlights,
+      ...fallbackHighlights,
+    ]).slice(0, 6);
+
+    return accumulator;
+  }, {});
+};
+
 const normalizeTravelTips = (value: unknown) => {
   if (!Array.isArray(value)) {
     return [];
@@ -502,15 +534,29 @@ const buildDestinationDayPlan = (days: number, destinationCount: number) => {
   );
 };
 
-const createFallbackDestinationDay = (destination: string, localDayNumber: number) => ({
-  phaseType: "destination" as const,
-  phaseTitle: `${destination} - Day ${localDayNumber}`,
-  destination,
-  morning: `Start the day with the main highlights of ${destination} at a comfortable pace.`,
-  afternoon: `Continue sightseeing around ${destination} with family-friendly local attractions.`,
-  evening: `Enjoy local food, a relaxed walk, and rest for the next day.`,
-  localTravelTip: `Keep local transport flexible and leave buffer time around major attractions in ${destination}.`,
-});
+const createFallbackDestinationDay = (
+  destination: string,
+  localDayNumber: number,
+  groupedPlaces: Record<string, string[]>
+) => {
+  const places = groupedPlaces[destination] || getFallbackDestinationHighlights(destination);
+  const primaryPlace =
+    places[(localDayNumber - 1) % Math.max(places.length, 1)] || destination;
+  const secondaryPlace =
+    places[localDayNumber % Math.max(places.length, 1)] || primaryPlace;
+  const eveningPlace =
+    places[(localDayNumber + 1) % Math.max(places.length, 1)] || secondaryPlace;
+
+  return {
+    phaseType: "destination" as const,
+    phaseTitle: `${destination} - Day ${localDayNumber}`,
+    destination,
+    morning: `Start the day at ${primaryPlace} and cover nearby signature sights in ${destination}.`,
+    afternoon: `Continue through ${secondaryPlace} and other well-known spots around ${destination}.`,
+    evening: `Spend a relaxed evening around ${eveningPlace} and enjoy local food in ${destination}.`,
+    localTravelTip: `Cluster local travel around ${primaryPlace} and ${secondaryPlace} so you can cover named attractions in ${destination} comfortably.`,
+  };
+};
 
 const reduceRepeatedDestinationDays = (
   itinerary: ReturnType<typeof normalizeItinerary>,
@@ -951,7 +997,7 @@ const buildStructuredItinerary = ({
       } else {
         const sourceDay =
           destinationPool[Math.min(localDay, destinationPool.length - 1)] ||
-          createFallbackDestinationDay(destination, localDay + 1);
+          createFallbackDestinationDay(destination, localDay + 1, groupedPlaces);
 
         result.push({
           day: absoluteDay,
@@ -1015,10 +1061,10 @@ const normalizeItineraryLength = (
       phaseType: "destination",
       phaseTitle: `${fallbackDestination} - Day ${nextDayNumber}`,
       destination: fallbackDestination,
-      morning: "Continue local sightseeing and relaxed family-friendly activities.",
-      afternoon: "Explore nearby highlights and enjoy a balanced outing.",
-      evening: "Keep the evening light with local food and rest.",
-      localTravelTip: "Keep enough buffer time and follow the local pace.",
+      morning: `Continue with ${getFallbackDestinationHighlights(fallbackDestination)[0] || fallbackDestination} and nearby named attractions.`,
+      afternoon: `Explore ${getFallbackDestinationHighlights(fallbackDestination)[1] || `popular spots in ${fallbackDestination}`} at a comfortable pace.`,
+      evening: `Spend a light evening around ${getFallbackDestinationHighlights(fallbackDestination)[2] || fallbackDestination} with local food and rest.`,
+      localTravelTip: `Keep enough buffer time so you can cover key attractions in ${fallbackDestination} without rushing.`,
     });
   }
 
@@ -1567,7 +1613,11 @@ ${extractJsonCandidate(aiText)}
       };
     });
     const normalizedPlacesToVisit = normalizePlacesToVisit(aiTrip.placesToVisit);
-    const groupedPlaces = groupItemsByDestination(normalizedPlacesToVisit, destinations);
+    const groupedPlaces = buildDestinationPlacePool({
+      placesToVisit: normalizedPlacesToVisit,
+      destinationCards: aiTrip.destinations,
+      destinations,
+    });
     const normalizedItinerary = improveCountryItinerary({
       itinerary: reduceRepeatedDestinationDays(buildStructuredItinerary({
       itinerary: normalizeItinerary(aiTrip.itinerary),

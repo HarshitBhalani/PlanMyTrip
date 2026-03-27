@@ -15,6 +15,7 @@ type SelectedPlace = {
 type JsVectorMapInstance = {
   destroy: () => void;
   reset: () => void;
+  setSelectedRegions: (regions: string[]) => void;
 };
 
 type JsVectorMapConstructor = new (options: Record<string, unknown>) => JsVectorMapInstance;
@@ -95,6 +96,8 @@ export default function WorldMapPicker() {
           map: "world",
           zoomButtons: true,
           zoomOnScroll: true,
+          regionsSelectable: true,
+          regionsSelectableOne: true,
           regionStyle: {
             initial: {
               fill: "#dbeafe",
@@ -122,6 +125,7 @@ export default function WorldMapPicker() {
             countryCode: string
           ) => {
             const countryName = getCountryNameFromCode(countryCode);
+            mapInstanceRef.current?.setSelectedRegions([countryCode]);
 
             setSelection({
               countryCode,
@@ -173,21 +177,19 @@ export default function WorldMapPicker() {
 
   const resetView = () => {
     mapInstanceRef.current?.reset();
+    mapInstanceRef.current?.setSelectedRegions([]);
     setSelection(null);
   };
 
   return (
     <div className="grid min-h-[calc(100vh-5rem)] gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
       <aside className="rounded-[28px] border border-gray-200 bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gray-400">
-          TailAdmin Style Map
-        </p>
         <h1 className="mt-3 text-3xl font-semibold text-gray-900">
           Select a country on the world map
         </h1>
         <p className="mt-3 text-sm leading-6 text-gray-600">
-          This version uses a TailAdmin-style vector world map. Click a country and send that
-          country directly to the create trip page.
+          Click a country to add it directly to your trip form and continue planning with a
+          cleaner country-first flow.
         </p>
 
         <div className="mt-6 space-y-4 rounded-3xl border border-gray-200 bg-white p-5">
@@ -253,11 +255,11 @@ export default function WorldMapPicker() {
 
         <div className="absolute inset-x-6 top-6 z-10 max-w-sm rounded-3xl border border-white/70 bg-white/85 p-4 shadow-sm backdrop-blur">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-500">
-            Prototype Note
+            Quick Guide
           </p>
           <p className="mt-2 text-sm leading-6 text-gray-600">
-            This map is now country-first and much more stable than the previous custom setup. State
-            selection is manual in this version.
+            Use the zoom controls to focus on a region, click a country, then send that selection
+            straight to the create-trip page.
           </p>
         </div>
 

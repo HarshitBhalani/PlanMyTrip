@@ -294,26 +294,29 @@ export default async function SharedTripPage({
         {tripData.hotels?.length > 0 && (
           <div>
             <h3 className="text-xl font-semibold mb-4">Hotel Options</h3>
-            {tripData.hotels.map((hotel: any, index: number) => (
-              <div key={`${hotel.name}-${index}`} className="border p-5 rounded-lg mb-3 bg-gray-50">
-                <div className="flex justify-between items-center">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {tripData.hotels.map((hotel: any, index: number) => (
+                <div key={`${hotel.name}-${index}`} className="flex h-full flex-col justify-between rounded-lg border bg-gray-50 p-5">
                   <div>
                     <p className="font-semibold text-lg">{toDisplayText(hotel.name)}</p>
-                    <p className="text-gray-600">{toDisplayText(hotel.priceRangePerNight)}</p>
+                    <p className="mt-1 text-xs font-medium uppercase tracking-[0.16em] text-gray-400">
+                      {toDisplayText(hotel.category)}
+                    </p>
+                    <p className="mt-2 text-gray-600">{toDisplayText(hotel.priceRangePerNight)}</p>
                   </div>
                   {hotel.bookingUrl && (
                     <a
                       href={hotel.bookingUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="bg-black text-white px-5 py-2 rounded-md hover:bg-gray-800 font-medium"
+                      className="mt-4 inline-flex w-full items-center justify-center rounded-md bg-black px-5 py-2 font-medium text-white hover:bg-gray-800"
                     >
                       Book
                     </a>
                   )}
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
 

@@ -1072,23 +1072,26 @@ export default function SavedTripsPage() {
                     <h4 className="text-xl font-semibold">Hotel Options</h4>
                   </div>
 
-                  {selectedTrip.tripData.hotels.map((hotel: any, i: number) => (
-                    <div key={i} className="border p-5 rounded-lg mb-3 bg-gray-50">
-                      <div className="flex justify-between items-center">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {selectedTrip.tripData.hotels.map((hotel: any, i: number) => (
+                      <div key={i} className="flex h-full flex-col justify-between rounded-lg border bg-gray-50 p-5">
                         <div>
                           <p className="font-semibold text-lg">{hotel.name}</p>
-                          <p className="text-gray-600">{hotel.priceRangePerNight}</p>
+                          <p className="mt-1 text-xs font-medium uppercase tracking-[0.16em] text-gray-400">
+                            {hotel.category}
+                          </p>
+                          <p className="mt-2 text-gray-600">{hotel.priceRangePerNight}</p>
                         </div>
                         <a
                           href={hotel.bookingUrl}
                           target="_blank"
-                          className="bg-black text-white px-5 py-2 rounded-md hover:bg-gray-800 font-medium"
+                          className="mt-4 inline-flex w-full items-center justify-center rounded-md bg-black px-5 py-2 font-medium text-white hover:bg-gray-800"
                         >
                           Book Now
                         </a>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
 

@@ -6,3 +6,48 @@ body {
   background-color: #f9fafb;
   color: #111827;
 }
+
+.jvm-container .jvm-zoom-btn {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(12px);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  z-index: 30;
+  left: auto !important;
+  right: 20px !important;
+}
+
+.jvm-container .jvm-zoom-btn:hover {
+  background: #ffffff;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16);
+  transform: translateY(-1px);
+}
+
+.jvm-container .jvm-zoom-btn:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
+.jvm-container .jvm-zoom-btn.jvm-zoomin {
+  top: 20px;
+  right: 20px !important;
+  left: auto !important;
+}
+
+.jvm-container .jvm-zoom-btn.jvm-zoomout {
+  top: 72px;
+  right: 20px !important;
+  left: auto !important;
+}
