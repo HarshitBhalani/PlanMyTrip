@@ -1,31 +1,36 @@
 # AI Trip Planner
 
-Full-stack AI trip planning app with a Next.js frontend and an Express + TypeScript backend. It generates structured itineraries, supports multi-destination trips, saves trips for later editing, and lets users share read-only public trip links.
+Full-stack AI trip planning app with a Next.js frontend and an Express + TypeScript backend. It generates structured day-wise itineraries, supports multi-destination routes, lets users edit AI output before and after saving, and creates read-only public share links for saved trips.
 
 ## Features
 
 - JWT-based signup and login
-- AI-generated itineraries with day-wise planning
-- Country selection through a separate interactive world map page
+- Landing page with curated destination carousels and category-based inspiration sections
+- Preselected destination handoff from landing cards or the world map into the trip form
+- Draft trip persistence in local storage, including post-login redirect back to trip creation
+- AI-generated itineraries with trip overview, transport info, destination flow, day-wise plans, hotel options, places to visit, food recommendations, travel tips, and estimated budget
 - Single, two-destination, and three-destination trip support
+- Live distance/travel-time previews between consecutive destinations before generation
 - Destination phase and travel-leg formatting for multi-stop trips
-- Exact day-count enforcement in generated itineraries
-- Country-aware itinerary generation with capital-city and tourism-cluster context
-- Family/friends group input with adult and child validation
-- Budget estimation based on trip type, members, days, destinations, and transfers
-- Saved trips with edit, delete, PDF download, and public sharing
-- Read-only public shared trip pages
-- Rate limiting on AI trip generation with JWT-aware user/IP fallback
-- Distance preview endpoint for destination-to-destination travel
+- Exact day-count enforcement and itinerary normalization for 1 to 15 days
+- Country-aware itinerary generation with capital-city and tourism-cluster context for map-selected countries
+- Traveler modes for solo, couple, family, and friends
+- Family and friends validation with adult/child count rules
+- Budget estimation based on budget type, traveler count, room assumptions, destination cost factors, and inter-city transfers
+- Saved trips with in-app detail view, editing, delete, PDF download, and public sharing
+- Read-only public shared trip pages that expose the saved itinerary without edit controls
+- Budget preference storage on the backend, with saved preference budget able to override the submitted budget during generation
+- JWT-aware burst/user/IP rate limiting on AI trip generation
 
 ## Tech Stack
 
 - Frontend: Next.js 16, React 19, TypeScript, Tailwind CSS
+- UI helpers: `lucide-react`, `sonner`
 - Map UI: `jsvectormap`
 - Backend: Node.js, Express 5, TypeScript, Mongoose
 - Database: MongoDB
-- AI: Groq
-- Auth: JWT + bcrypt
+- AI: Groq (`llama-3.1-8b-instant`)
+- Auth: JWT + `bcryptjs`
 - PDF Export: `jspdf` + `jspdf-autotable`
 
 ## Project Structure
@@ -35,8 +40,9 @@ ai-trip-planner/
   client/                  # Next.js app
     src/app/               # App Router pages
     src/components/        # Shared UI
-    src/lib/               # Auth and API helpers
-    src/utils/             # Frontend validation helpers
+    src/app/lib/           # API calls and pending-trip persistence
+    src/lib/               # Shared auth/util helpers
+    src/utils/             # Frontend destination validation helpers
   server/                  # Express API
     src/controllers/       # Route handlers
     src/routes/            # API route definitions
@@ -45,6 +51,16 @@ ai-trip-planner/
     src/services/          # AI integration
     src/utils/             # Distance and destination helpers
 ```
+
+## Main Pages
+
+- `/` - landing page with destination inspiration cards
+- `/create-trip` - trip builder, AI generation, inline editing, and save flow
+- `/map` - country picker powered by `jsvectormap`
+- `/saved-trips` - saved trip library with modal detail view, edit, delete, share, and PDF export
+- `/shared-trip/[slug]` - public read-only shared itinerary page
+- `/auth/login` and `/auth/signup` - authentication pages
+- `/preferences` - preferences route for user-specific trip settings
 
 ## Prerequisites
 
@@ -138,6 +154,7 @@ Open:
 - `npm run dev` - start backend with nodemon
 - `npm run build` - compile TypeScript to `dist/`
 - `npm run start` - run compiled backend with `node dist/server.js`
+- `npm run migrate:remove-hotel-ratings` - cleanup script for saved trip hotel data
 
 ## API Overview
 
@@ -171,20 +188,22 @@ Base URL: `http://localhost:5000`
 
 ## Current App Flow
 
-1. User signs up or logs in.
-2. JWT token is stored in browser storage.
-3. User creates a trip with one to three destinations, days, budget type, and traveler type.
-4. User can also open a separate map page and choose a country directly from the world map.
-5. For `family` and `friends`, the form also collects adult and child counts.
-6. Backend validates input, applies rate limits, enriches country destinations with country/capital context, and generates a structured AI itinerary.
-7. Final itinerary is normalized to the exact requested number of days.
-8. User can review the generated trip, then save it.
-9. Saved trips can be viewed, edited, deleted, downloaded as PDF, or shared via a public read-only link.
+1. User explores destinations from the landing page or opens the separate world map page.
+2. Selected destinations are carried into the create-trip form, and in-progress form data is stored in local storage.
+3. If generation is attempted while logged out, the app preserves the draft and redirects the user back after authentication.
+4. User creates a trip with one to three destinations, 1 to 15 days, budget type, and traveler type.
+5. For `family` and `friends`, the form also collects validated adult and child counts.
+6. When multiple destinations are entered, the frontend requests travel distance previews between each leg.
+7. Backend validates payload size and trip input, applies JWT-aware rate limits, enriches country destinations with country/capital context, and generates a structured AI itinerary.
+8. Final itinerary is normalized to the exact requested number of days and returned with destination flow, travel legs, places, food suggestions, hotel options, travel tips, and estimated budget.
+9. User can edit the generated result before saving.
+10. Saved trips can later be opened, edited again, deleted, downloaded as PDF, or shared via a public read-only link.
 
 ## Multi-Destination Behavior
 
 - Maximum 3 destinations per trip
 - Total trip days remain fixed across all destinations
+- Travel previews are requested for each consecutive leg before generation
 - Destination cards and itinerary length are normalized to the exact requested day count
 - AI itinerary separates:
   - destination phases
@@ -209,7 +228,8 @@ Base URL: `http://localhost:5000`
 ## Saved Trip Features
 
 - Full saved itinerary rendering
-- Edit support for itinerary and trip details
+- Edit support for itinerary, title, transport, and budget details
+- Places to visit, food recommendations, and travel tips sections are preserved in saved trips
 - PDF download with PlanMyTrip branding
 - Saved date/time visible on trip cards
 - Public share links for read-only trip viewing
@@ -223,6 +243,7 @@ Base URL: `http://localhost:5000`
 - Configure backend env vars in the hosting dashboard; do not rely on committing `.env`.
 - Set frontend `NEXT_PUBLIC_API_URL` to the deployed backend URL.
 - Backend CORS is configured for local frontend and the deployed Vercel frontend.
+- `server/src/server.ts` also contains a production keep-alive ping for the deployed Render backend.
 
 ## Notes
 
