@@ -663,10 +663,10 @@ export default function HomePage() {
       <footer className="bg-gray-900 text-white py-8 px-4">
         <div className="max-w-6xl mx-auto text-center">
           <p className="text-gray-400">
-            © 2025 AI Trip Planner. All rights reserved.
+            © 2026 PlanMyTrip. All rights reserved.
           </p>
           <p className="text-gray-500 mt-2 text-sm">
-            Made with ❤️ for travelers everywhere
+            Made with ❤️ for travelers and unforgettable journeys.
           </p>
         </div>
       </footer>
