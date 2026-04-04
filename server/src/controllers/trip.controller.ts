@@ -25,9 +25,66 @@ type TravelerDetails = {
   label: string;
 };
 
+type TripPreferences = {
+  budgetRange: "cheap" | "moderate" | "luxury";
+  hotelType: "budget" | "premium" | "luxury";
+  travelPace: "relaxed" | "balanced" | "packed";
+  foodPreference: "veg" | "non-veg" | "both";
+  transportPreference: "public" | "private" | "mixed";
+};
+
 const FAMILY_ADULT_LIMITS = { min: 2, max: 7 } as const;
 const FAMILY_CHILD_LIMITS = { min: 0, max: 5 } as const;
 const FRIENDS_ADULT_LIMITS = { min: 8, max: 15 } as const;
+const DEFAULT_TRIP_PREFERENCES: TripPreferences = {
+  budgetRange: "moderate",
+  hotelType: "budget",
+  travelPace: "balanced",
+  foodPreference: "veg",
+  transportPreference: "mixed",
+};
+
+const normalizeBudgetPreference = (value?: string): TripPreferences["budgetRange"] => {
+  if (value === "cheap" || value === "moderate" || value === "luxury") {
+    return value;
+  }
+
+  if (value === "medium") {
+    return "moderate";
+  }
+
+  if (value === "high" || value === "premium") {
+    return "luxury";
+  }
+
+  if (value === "low") {
+    return "cheap";
+  }
+
+  return DEFAULT_TRIP_PREFERENCES.budgetRange;
+};
+
+const normalizePreferencePayload = (value: any): TripPreferences => ({
+  budgetRange: normalizeBudgetPreference(value?.budgetRange),
+  hotelType:
+    value?.hotelType === "budget" || value?.hotelType === "premium" || value?.hotelType === "luxury"
+      ? value.hotelType
+      : DEFAULT_TRIP_PREFERENCES.hotelType,
+  travelPace:
+    value?.travelPace === "relaxed" || value?.travelPace === "balanced" || value?.travelPace === "packed"
+      ? value.travelPace
+      : DEFAULT_TRIP_PREFERENCES.travelPace,
+  foodPreference:
+    value?.foodPreference === "veg" || value?.foodPreference === "non-veg" || value?.foodPreference === "both"
+      ? value.foodPreference
+      : DEFAULT_TRIP_PREFERENCES.foodPreference,
+  transportPreference:
+    value?.transportPreference === "public" ||
+    value?.transportPreference === "private" ||
+    value?.transportPreference === "mixed"
+      ? value.transportPreference
+      : DEFAULT_TRIP_PREFERENCES.transportPreference,
+});
 
 const sanitizeTripData = (tripData: any) => {
   if (!tripData || typeof tripData !== "object") {
@@ -181,6 +238,7 @@ const getDestinationCostFactor = (destination: string) => {
 
 const getBudgetEstimate = (
   budgetType: string,
+  preferences: TripPreferences,
   travelerDetails: TravelerDetails,
   totalDays: number,
   destinations: string[],
@@ -192,35 +250,76 @@ const getBudgetEstimate = (
     moderate: { adult: 3500, child: 2200 },
     luxury: { adult: 8000, child: 5000 },
   }[budgetType] || { adult: 3500, child: 2200 };
-
-  const transportOverheadPerDay =
-    travelerDetails.totalMembers >= 6 ? 400 : travelerDetails.totalMembers >= 4 ? 250 : 0;
   const effectiveGuests = travelerDetails.adults + travelerDetails.children * 0.5;
   const estimatedRooms = Math.max(1, Math.ceil(effectiveGuests / 2));
-  const basePerDayCost =
+  const hotelRoomRate = {
+    budget: { cheap: 1200, moderate: 1800, luxury: 2600 },
+    premium: { cheap: 3200, moderate: 4800, luxury: 6800 },
+    luxury: { cheap: 7000, moderate: 9500, luxury: 13500 },
+  }[preferences.hotelType][budgetType as "cheap" | "moderate" | "luxury"] || 1800;
+  const travelPaceMultiplier = {
+    relaxed: 1.12,
+    balanced: 1,
+    packed: 0.9,
+  }[preferences.travelPace];
+  const foodCostPerPersonPerDay = {
+    veg: { cheap: 250, moderate: 450, luxury: 850 },
+    "non-veg": { cheap: 350, moderate: 650, luxury: 1200 },
+    both: { cheap: 320, moderate: 560, luxury: 1050 },
+  }[preferences.foodPreference][budgetType as "cheap" | "moderate" | "luxury"] || 450;
+  const localTransportPerPersonPerDay = {
+    public: { cheap: 120, moderate: 180, luxury: 260 },
+    mixed: { cheap: 280, moderate: 420, luxury: 650 },
+    private: { cheap: 520, moderate: 800, luxury: 1200 },
+  }[preferences.transportPreference][budgetType as "cheap" | "moderate" | "luxury"] || 180;
+  const stayBaseCost =
     travelerDetails.adults * perPersonBudget.adult +
-    travelerDetails.children * perPersonBudget.child +
-    estimatedRooms * transportOverheadPerDay;
+    travelerDetails.children * perPersonBudget.child;
+  const foodBaseCost =
+    foodCostPerPersonPerDay *
+    (travelerDetails.adults + travelerDetails.children * 0.8);
+  const localTransportBaseCost =
+    localTransportPerPersonPerDay *
+    (travelerDetails.adults + travelerDetails.children * 0.6);
+  const pacedDailyCost =
+    (stayBaseCost + estimatedRooms * hotelRoomRate + foodBaseCost + localTransportBaseCost) *
+    travelPaceMultiplier;
   const destinationWeightedStayCost = destinations.reduce((total, destination, index) => {
     const allocatedDays = dayPlan[index] || 1;
     const destinationFactor = getDestinationCostFactor(destination);
 
-    return total + basePerDayCost * destinationFactor * allocatedDays;
+    return total + pacedDailyCost * destinationFactor * allocatedDays;
   }, 0);
   const travelLegCost = travelEstimates.reduce((total, estimate) => {
     if (!estimate) {
-      return total + Math.max(1200, travelerDetails.totalMembers * 450);
+      const unknownLegFloor = {
+        public: 1200,
+        mixed: 2200,
+        private: 4200,
+      }[preferences.transportPreference];
+
+      return total + Math.max(unknownLegFloor, travelerDetails.totalMembers * 450);
     }
 
-    const roadCostPerKm =
-      budgetType === "luxury" ? 18 : budgetType === "cheap" ? 8 : 12;
-    const sharedTransferFloor =
-      budgetType === "luxury" ? 4000 : budgetType === "cheap" ? 1200 : 2200;
+    const roadCostPerKm = {
+      public: budgetType === "luxury" ? 10 : budgetType === "cheap" ? 5 : 7,
+      mixed: budgetType === "luxury" ? 18 : budgetType === "cheap" ? 8 : 12,
+      private: budgetType === "luxury" ? 28 : budgetType === "cheap" ? 14 : 20,
+    }[preferences.transportPreference];
+    const sharedTransferFloor = {
+      public: budgetType === "luxury" ? 1800 : budgetType === "cheap" ? 700 : 1200,
+      mixed: budgetType === "luxury" ? 4000 : budgetType === "cheap" ? 1200 : 2200,
+      private: budgetType === "luxury" ? 7500 : budgetType === "cheap" ? 3000 : 5000,
+    }[preferences.transportPreference];
     const distanceDrivenCost = estimate.distanceKm * roadCostPerKm;
     const groupTransferCost =
-      travelerDetails.totalMembers >= 6
-        ? distanceDrivenCost + travelerDetails.totalMembers * 180
-        : distanceDrivenCost + travelerDetails.totalMembers * 110;
+      preferences.transportPreference === "public"
+        ? distanceDrivenCost + travelerDetails.totalMembers * 70
+        : preferences.transportPreference === "private"
+          ? distanceDrivenCost + travelerDetails.totalMembers * 220
+          : travelerDetails.totalMembers >= 6
+            ? distanceDrivenCost + travelerDetails.totalMembers * 180
+            : distanceDrivenCost + travelerDetails.totalMembers * 110;
 
     return total + Math.max(sharedTransferFloor, Math.round(groupTransferCost));
   }, 0);
@@ -231,6 +330,10 @@ const getBudgetEstimate = (
     perDayCost,
     totalCost,
     estimatedRooms,
+    hotelRoomRate,
+    foodCostPerPersonPerDay,
+    localTransportPerPersonPerDay,
+    travelPaceMultiplier,
     travelLegCost,
     destinationWeightedStayCost: Math.round(destinationWeightedStayCost),
   };
@@ -1198,6 +1301,37 @@ const buildHotelOptions = (
     )}`,
   }));
 
+const getHotelPreferenceDetails = (
+  hotelType: TripPreferences["hotelType"],
+  travelers: string
+) => {
+  if (hotelType === "luxury") {
+    return {
+      hotelCategory: "Luxury 4-5 Star Hotel",
+      priceRange: "Rs 8,000 - Rs 15,000",
+    };
+  }
+
+  if (hotelType === "premium") {
+    return {
+      hotelCategory: "Premium 3 Star Hotel",
+      priceRange: "Rs 3,000 - Rs 6,500",
+    };
+  }
+
+  if (travelers === "solo") {
+    return {
+      hotelCategory: "Budget Hotel / Hostel Dormitory / Guest House",
+      priceRange: "Rs 500 - Rs 2,200",
+    };
+  }
+
+  return {
+    hotelCategory: "Budget Hotel / Guest House",
+    priceRange: "Rs 800 - Rs 2,200",
+  };
+};
+
 const buildPrompt = ({
   destinations,
   days,
@@ -1206,6 +1340,7 @@ const buildPrompt = ({
   travelEstimates,
   countryContexts,
   countryInsights,
+  preferences,
 }: {
   destinations: string[];
   days: number;
@@ -1214,6 +1349,7 @@ const buildPrompt = ({
   travelEstimates: Array<TravelEstimate | null>;
   countryContexts: CountryTravelContext[];
   countryInsights: Record<string, CountryInsight>;
+  preferences: TripPreferences;
 }) => {
   const dayPlan = buildDestinationDayPlan(days, destinations.length);
   const destinationList = destinations
@@ -1301,12 +1437,27 @@ ${destinationList}
 - Total Days: ${days}
 - Travelers: ${travelers}
 - Party Details: ${travelerDetails.label} (${travelerDetails.adults} adults, ${travelerDetails.children} children)
+- User Preferences:
+  - Budget Preference: ${preferences.budgetRange}
+  - Hotel Preference: ${preferences.hotelType}
+  - Travel Pace: ${preferences.travelPace}
+  - Food Preference: ${preferences.foodPreference}
+  - Transport Preference: ${preferences.transportPreference}
 - Travel Legs:
 ${travelLegList}
 - Confirmed Country Context:
 ${countryContextList}
 - Destination Planning Insights:
 ${countryInsightList}
+
+Preference Guidance:
+- Match the itinerary style to the travel pace: relaxed means fewer activities and more breathing room, packed means higher activity density, balanced stays moderate.
+- Respect the food preference in foodRecommendations and meal mentions.
+- Respect the transport preference while suggesting practical transfers and local movement.
+- Align hotel tone and recommended stay style with the hotel preference.
+- Never recommend Dharamshala or religious lodging in hotel suggestions.
+- Hostel dormitory is allowed only when Travelers is solo and only for budget-style stays.
+- Keep the overall trip style aligned with the selected budget preference.
 
 Return JSON EXACTLY in this format:
 {
@@ -1445,6 +1596,7 @@ export const generateTrip = async (req: any, res: Response) => {
       travelers,
       adults,
       children,
+      preferences: incomingPreferences,
     } = req.body;
     const destinations = [
       normalizeDestination(destination),
@@ -1465,11 +1617,30 @@ export const generateTrip = async (req: any, res: Response) => {
 
     const hasMultipleDestinations = destinations.length > 1;
 
-    const preferences = await UserPreference.findOne({
+    const savedPreferences = await UserPreference.findOne({
       user: req.user._id,
     });
+    const effectivePreferences = normalizePreferencePayload({
+      ...DEFAULT_TRIP_PREFERENCES,
+      ...(savedPreferences?.toObject?.() || savedPreferences || {}),
+      ...(incomingPreferences && typeof incomingPreferences === "object"
+        ? incomingPreferences
+        : {}),
+    });
 
-    const finalBudget = preferences?.budgetRange || budgetType;
+    if (incomingPreferences && typeof incomingPreferences === "object") {
+      await UserPreference.findOneAndUpdate(
+        { user: req.user._id },
+        { ...effectivePreferences, user: req.user._id },
+        { new: true, upsert: true }
+      );
+    }
+
+    const finalBudget = normalizeBudgetPreference(budgetType);
+    const tripPreferencesForGeneration: TripPreferences = {
+      ...effectivePreferences,
+      budgetRange: finalBudget,
+    };
     const travelerValidationMessage = validateTravelerCounts(
       travelers,
       Number(adults),
@@ -1499,6 +1670,7 @@ export const generateTrip = async (req: any, res: Response) => {
       : [];
     const budgetEstimate = getBudgetEstimate(
       finalBudget,
+      tripPreferencesForGeneration,
       travelerDetails,
       requestedDays,
       destinations,
@@ -1532,6 +1704,7 @@ export const generateTrip = async (req: any, res: Response) => {
       travelEstimates,
       countryContexts,
       countryInsights,
+      preferences: tripPreferencesForGeneration,
     });
 
     const aiText = await generateTripWithAI(prompt);
@@ -1566,19 +1739,10 @@ ${extractJsonCandidate(aiText)}
       });
     }
 
-    let hotelCategory = "";
-    let priceRange = "";
-
-    if (finalBudget === "cheap") {
-      hotelCategory = "Budget Hotel / Homestay / Dharamshala";
-      priceRange = "Rs 800 - Rs 2,000";
-    } else if (finalBudget === "moderate") {
-      hotelCategory = "3-4 Star Hotel";
-      priceRange = "Rs 3,000 - Rs 5,500";
-    } else {
-      hotelCategory = "Luxury 4-5 Star Hotel";
-      priceRange = "Rs 7,000 - Rs 12,000";
-    }
+    const { hotelCategory, priceRange } = getHotelPreferenceDetails(
+      effectivePreferences.hotelType,
+      travelers
+    );
 
     const travelRecommendations = travelEstimates.map((travelEstimate, index) =>
       buildTravelRecommendations(
@@ -1687,10 +1851,11 @@ ${extractJsonCandidate(aiText)}
           total: `Rs ${totalCost}`,
           note:
             destinations.length > 1
-              ? `Approximate cost for ${travelerDetails.label} on a ${finalBudget} budget across ${destinations.join(", ")}. This estimate includes member count, destination-wise stay cost, around ${budgetEstimate.estimatedRooms} room${budgetEstimate.estimatedRooms === 1 ? "" : "s"} per night, and about Rs ${budgetEstimate.travelLegCost} for inter-city transfers.`
-              : `Approximate cost for ${travelerDetails.label} on a ${finalBudget} budget in ${destinations[0]}. This estimate includes member count, destination stay cost, and around ${budgetEstimate.estimatedRooms} room${budgetEstimate.estimatedRooms === 1 ? "" : "s"} per night.`,
+              ? `Approximate cost for ${travelerDetails.label} on a ${finalBudget} budget across ${destinations.join(", ")}. This estimate factors in ${effectivePreferences.hotelType} stays, a ${effectivePreferences.travelPace} pace, ${effectivePreferences.transportPreference} transport, ${effectivePreferences.foodPreference} meals, around ${budgetEstimate.estimatedRooms} room${budgetEstimate.estimatedRooms === 1 ? "" : "s"} per night, and about Rs ${budgetEstimate.travelLegCost} for inter-city transfers.`
+              : `Approximate cost for ${travelerDetails.label} on a ${finalBudget} budget in ${destinations[0]}. This estimate factors in ${effectivePreferences.hotelType} stays, a ${effectivePreferences.travelPace} pace, ${effectivePreferences.transportPreference} transport, ${effectivePreferences.foodPreference} meals, and around ${budgetEstimate.estimatedRooms} room${budgetEstimate.estimatedRooms === 1 ? "" : "s"} per night.`,
         },
         travelerDetails,
+        appliedPreferences: tripPreferencesForGeneration,
       },
     });
   } catch (error) {

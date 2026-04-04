@@ -10,8 +10,8 @@ const UserPreferenceSchema = new Schema(
     },
 
     budgetRange: {
-      type: String, // low | medium | high
-      default: "medium",
+      type: String, // cheap | moderate | luxury
+      default: "moderate",
     },
 
     hotelType: {
@@ -26,7 +26,7 @@ const UserPreferenceSchema = new Schema(
 
     foodPreference: {
       type: String, // veg | non-veg | both
-      default: "both",
+      default: "veg",
     },
 
     transportPreference: {

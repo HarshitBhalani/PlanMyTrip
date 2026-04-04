@@ -40,8 +40,17 @@ export default function Navbar() {
 
   const navLinks = [
     { href: "/create-trip", label: "Create Trip" },
+    { href: "/map", label: "Explore Map" },
     { href: "/saved-trips", label: "Saved Trips" },
   ];
+
+  const isActiveLink = (href: string) => {
+    if (href === "/") {
+      return pathname === "/";
+    }
+
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
 
   const handleFreshCreateTrip = () => {
     clearPendingTripDraft();
@@ -88,7 +97,11 @@ export default function Navbar() {
                   key={link.href}
                   type="button"
                   onClick={handleFreshCreateTrip}
-                  className="rounded-full px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-950"
+                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                    isActiveLink(link.href)
+                      ? "bg-gray-900 text-white"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-950"
+                  }`}
                 >
                   {link.label}
                 </button>
@@ -96,7 +109,11 @@ export default function Navbar() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="rounded-full px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-950"
+                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                    isActiveLink(link.href)
+                      ? "bg-gray-900 text-white"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-950"
+                  }`}
                 >
                   {link.label}
                 </Link>
@@ -172,7 +189,11 @@ export default function Navbar() {
                   key={link.href}
                   type="button"
                   onClick={handleFreshCreateTrip}
-                  className="rounded-2xl px-4 py-3 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                  className={`rounded-2xl px-4 py-3 text-left text-sm font-medium transition ${
+                    isActiveLink(link.href)
+                      ? "bg-gray-900 text-white"
+                      : "text-gray-700 hover:bg-gray-50"
+                  }`}
                 >
                   {link.label}
                 </button>
@@ -180,7 +201,11 @@ export default function Navbar() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="rounded-2xl px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                  className={`rounded-2xl px-4 py-3 text-sm font-medium transition ${
+                    isActiveLink(link.href)
+                      ? "bg-gray-900 text-white"
+                      : "text-gray-700 hover:bg-gray-50"
+                  }`}
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   {link.label}

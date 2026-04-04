@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, Map, PlusCircle, X } from "lucide-react";
+import { ChevronDown, Loader2, Map, PlusCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest } from "../lib/api";
 import {
@@ -99,6 +99,14 @@ type GeneratedTripContext = {
   };
 };
 
+type TripPreferences = {
+  budgetRange: "cheap" | "moderate" | "luxury";
+  hotelType: "budget" | "premium" | "luxury";
+  travelPace: "relaxed" | "balanced" | "packed";
+  foodPreference: "veg" | "non-veg" | "both";
+  transportPreference: "public" | "private" | "mixed";
+};
+
 const FAMILY_ADULT_LIMITS = {
   min: 2,
   max: 7,
@@ -113,6 +121,65 @@ const FRIENDS_ADULT_LIMITS = {
   min: 8,
   max: 15,
 } as const;
+
+const DEFAULT_TRIP_PREFERENCES: TripPreferences = {
+  budgetRange: "moderate",
+  hotelType: "budget",
+  travelPace: "balanced",
+  foodPreference: "veg",
+  transportPreference: "mixed",
+};
+
+const preferenceLabels = {
+  budgetRange: {
+    cheap: "Cheap",
+    moderate: "Moderate",
+    luxury: "Luxury",
+  },
+  hotelType: {
+    budget: "Budget",
+    premium: "Premium",
+    luxury: "Luxury",
+  },
+  travelPace: {
+    relaxed: "Relaxed",
+    balanced: "Balanced",
+    packed: "Packed",
+  },
+  foodPreference: {
+    veg: "Veg",
+    "non-veg": "Non-veg",
+    both: "Both",
+  },
+  transportPreference: {
+    public: "Public",
+    private: "Private",
+    mixed: "Mixed",
+  },
+} as const;
+
+const normalizePreferences = (value?: Partial<TripPreferences> | null): TripPreferences => ({
+  budgetRange:
+    value?.budgetRange === "cheap" || value?.budgetRange === "moderate" || value?.budgetRange === "luxury"
+      ? value.budgetRange
+      : DEFAULT_TRIP_PREFERENCES.budgetRange,
+  hotelType:
+    value?.hotelType === "budget" || value?.hotelType === "premium" || value?.hotelType === "luxury"
+      ? value.hotelType
+      : DEFAULT_TRIP_PREFERENCES.hotelType,
+  travelPace:
+    value?.travelPace === "relaxed" || value?.travelPace === "balanced" || value?.travelPace === "packed"
+      ? value.travelPace
+      : DEFAULT_TRIP_PREFERENCES.travelPace,
+  foodPreference:
+    value?.foodPreference === "veg" || value?.foodPreference === "non-veg" || value?.foodPreference === "both"
+      ? value.foodPreference
+      : DEFAULT_TRIP_PREFERENCES.foodPreference,
+  transportPreference:
+    value?.transportPreference === "public" || value?.transportPreference === "private" || value?.transportPreference === "mixed"
+      ? value.transportPreference
+      : DEFAULT_TRIP_PREFERENCES.transportPreference,
+});
 
 const normalizeTravelerErrorMessage = (message?: string) => {
   if (!message) {
@@ -231,6 +298,150 @@ function OptionCard({ title, desc, icon, selected, onClick }: any) {
   );
 }
 
+function PreferenceSelect<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-medium text-gray-700">{label}</label>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value as T)}
+          className="w-full appearance-none rounded-xl border border-gray-200 bg-white px-4 py-3 pr-11 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gray-900"
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-gray-500">
+          <ChevronDown className="h-4 w-4" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function PreferenceModal({
+  value,
+  onChange,
+  onClose,
+  onSave,
+  saving,
+}: {
+  value: TripPreferences;
+  onChange: (value: TripPreferences) => void;
+  onClose: () => void;
+  onSave: () => void;
+  saving: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+      <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Trip Preferences</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              These settings shape the AI itinerary and stay saved for your account.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition hover:border-gray-400 hover:text-gray-800"
+            aria-label="Close preferences"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <PreferenceSelect
+            label="Budget preference"
+            value={value.budgetRange}
+            onChange={(budgetRange) => onChange({ ...value, budgetRange })}
+            options={[
+              { value: "cheap", label: "Cheap" },
+              { value: "moderate", label: "Moderate" },
+              { value: "luxury", label: "Luxury" },
+            ]}
+          />
+          <PreferenceSelect
+            label="Hotel type"
+            value={value.hotelType}
+            onChange={(hotelType) => onChange({ ...value, hotelType })}
+            options={[
+              { value: "budget", label: "Budget" },
+              { value: "premium", label: "Premium" },
+              { value: "luxury", label: "Luxury" },
+            ]}
+          />
+          <PreferenceSelect
+            label="Travel pace"
+            value={value.travelPace}
+            onChange={(travelPace) => onChange({ ...value, travelPace })}
+            options={[
+              { value: "relaxed", label: "Relaxed" },
+              { value: "balanced", label: "Balanced" },
+              { value: "packed", label: "Packed" },
+            ]}
+          />
+          <PreferenceSelect
+            label="Food preference"
+            value={value.foodPreference}
+            onChange={(foodPreference) => onChange({ ...value, foodPreference })}
+            options={[
+              { value: "veg", label: "Veg" },
+              { value: "non-veg", label: "Non-veg" },
+              { value: "both", label: "Both" },
+            ]}
+          />
+          <PreferenceSelect
+            label="Transport preference"
+            value={value.transportPreference}
+            onChange={(transportPreference) => onChange({ ...value, transportPreference })}
+            options={[
+              { value: "public", label: "Public" },
+              { value: "private", label: "Private" },
+              { value: "mixed", label: "Mixed" },
+            ]}
+          />
+        </div>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-500 hover:bg-gray-50"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold text-white transition ${
+              saving ? "cursor-not-allowed bg-gray-300" : "bg-gray-900 hover:bg-gray-700"
+            }`}
+          >
+            {saving ? "Saving..." : "Save Preferences"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const ordinalLabel = (index: number) => {
   const labels = ["1ST", "2ND", "3RD", "4TH", "5TH"];
   return labels[index] ?? `${index + 1}TH`;
@@ -265,6 +476,10 @@ export default function CreateTripPage() {
   const [travelerError, setTravelerError] = useState("");
   const [generationElapsedSeconds, setGenerationElapsedSeconds] = useState(0);
   const [hasLoadedDraft, setHasLoadedDraft] = useState(false);
+  const [preferences, setPreferences] = useState<TripPreferences>(DEFAULT_TRIP_PREFERENCES);
+  const [draftPreferences, setDraftPreferences] = useState<TripPreferences>(DEFAULT_TRIP_PREFERENCES);
+  const [showPreferenceModal, setShowPreferenceModal] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
 
   const resetTripForm = () => {
     setDestination("");
@@ -273,7 +488,7 @@ export default function CreateTripPage() {
     setShowThirdDestination(false);
     setThirdDestination("");
     setDays("");
-    setBudgetType("moderate");
+    setBudgetType(preferences.budgetRange);
     setTravelers("couple");
     setAdults(2);
     setChildren(0);
@@ -305,6 +520,46 @@ export default function CreateTripPage() {
         : "Preparing route flow, stay plan, and destination recommendations.";
   const requiresMemberBreakdown = travelers === "family" || travelers === "friends";
   const travelerConfig = getTravelerConfig(travelers, adults, children);
+
+  const openPreferenceModal = () => {
+    setDraftPreferences(preferences);
+    setShowPreferenceModal(true);
+  };
+
+  const applyPreferences = (nextPreferences: TripPreferences, syncBudget = true) => {
+    const normalized = normalizePreferences(nextPreferences);
+    setPreferences(normalized);
+    setDraftPreferences(normalized);
+    if (syncBudget) {
+      setBudgetType(normalized.budgetRange);
+    }
+  };
+
+  const savePreferences = async () => {
+    const token = localStorage.getItem("token");
+    const normalized = normalizePreferences(draftPreferences);
+
+    applyPreferences(normalized);
+
+    if (!token) {
+      setShowPreferenceModal(false);
+      toast.success("Preferences updated for this trip form");
+      return;
+    }
+
+    setSavingPreferences(true);
+    try {
+      await apiRequest("/api/user/preferences", "PUT", normalized, token);
+      setShowPreferenceModal(false);
+      toast.success("Preferences saved");
+    } catch (error: any) {
+      toast.error("Failed to save preferences", {
+        description: error?.message || "Please try again.",
+      });
+    } finally {
+      setSavingPreferences(false);
+    }
+  };
 
   useEffect(() => {
     const pendingDraft = getPendingTripDraft();
@@ -353,6 +608,40 @@ export default function CreateTripPage() {
     localStorage.removeItem("preSelectedDestination");
     localStorage.removeItem("preSelectedDestinationMeta");
     setHasLoadedDraft(true);
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      applyPreferences(DEFAULT_TRIP_PREFERENCES, false);
+      return;
+    }
+
+    let isActive = true;
+
+    const loadPreferences = async () => {
+      try {
+        const response = await apiRequest("/api/user/preferences", "GET", undefined, token);
+        if (!isActive) {
+          return;
+        }
+
+        const pendingDraft = getPendingTripDraft();
+        applyPreferences(normalizePreferences(response?.preferences), !pendingDraft?.budgetType);
+      } catch {
+        if (isActive) {
+          const pendingDraft = getPendingTripDraft();
+          applyPreferences(DEFAULT_TRIP_PREFERENCES, !pendingDraft?.budgetType);
+        }
+      }
+    };
+
+    loadPreferences();
+
+    return () => {
+      isActive = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -595,6 +884,7 @@ export default function CreateTripPage() {
           thirdDestination: validation.cleanedDestinations[2] || undefined,
           days,
           budgetType,
+          preferences,
           travelers,
           adults: requiresMemberBreakdown ? adults : undefined,
           children: requiresMemberBreakdown ? children : undefined,
@@ -739,12 +1029,76 @@ export default function CreateTripPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-10">
+    <div className="relative max-w-5xl mx-auto px-4 py-10">
       {/* Page Header */}
       <h1 className="text-3xl font-bold mb-1 text-gray-900">Tell us your travel preferences 🏕️🌴</h1>
       <p className="text-gray-500 mb-10">
         Just provide some basic information, and our trip planner will generate a customized itinerary.
       </p>
+
+      <button
+        type="button"
+        onClick={openPreferenceModal}
+        className="absolute right-4 top-10 inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:border-gray-500 hover:bg-gray-100"
+      >
+        Preferences
+      </button>
+
+      <div className="hidden mb-8 rounded-3xl border border-gray-200 bg-gray-50 p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-400">
+              AI Preference Profile
+            </p>
+            <h2 className="mt-1 text-xl font-semibold text-gray-900">
+              Saved defaults for this user
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              AI responses use these preferences by default, and you can still customize them before generating.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openPreferenceModal}
+            className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:border-gray-500 hover:bg-gray-100"
+          >
+            Preferences
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-5">
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Budget</p>
+            <p className="mt-2 text-sm font-semibold text-gray-900">
+              {preferenceLabels.budgetRange[preferences.budgetRange]}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Hotel</p>
+            <p className="mt-2 text-sm font-semibold text-gray-900">
+              {preferenceLabels.hotelType[preferences.hotelType]}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Pace</p>
+            <p className="mt-2 text-sm font-semibold text-gray-900">
+              {preferenceLabels.travelPace[preferences.travelPace]}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Food</p>
+            <p className="mt-2 text-sm font-semibold text-gray-900">
+              {preferenceLabels.foodPreference[preferences.foodPreference]}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Transport</p>
+            <p className="mt-2 text-sm font-semibold text-gray-900">
+              {preferenceLabels.transportPreference[preferences.transportPreference]}
+            </p>
+          </div>
+        </div>
+      </div>
 
       <div className="space-y-8">
         {/* Destinations */}
@@ -759,7 +1113,7 @@ export default function CreateTripPage() {
                     setDestination(e.target.value);
                     setDestinationErrors((current) => ({ ...current, destination: undefined }));
                   }}
-                  placeholder="Ex: Goa, Dwarka, Manali"
+                  placeholder="Try Goa, Jaipur, Tokyo, or Bali"
                   className={`w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition ${
                     destinationErrors.destination ? "border-red-400 bg-red-50" : "border-gray-200"
                   }`}
@@ -801,7 +1155,7 @@ export default function CreateTripPage() {
                       setSecondDestination(e.target.value);
                       setDestinationErrors((current) => ({ ...current, secondDestination: undefined }));
                     }}
-                    placeholder="Ex: Trimbakeshwar"
+                    placeholder="Add another stop like Udaipur or Kyoto"
                     className={`w-full border rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition ${
                       destinationErrors.secondDestination ? "border-red-400 bg-red-50" : "border-gray-200"
                     }`}
@@ -847,7 +1201,7 @@ export default function CreateTripPage() {
                       setThirdDestination(e.target.value);
                       setDestinationErrors((current) => ({ ...current, thirdDestination: undefined }));
                     }}
-                    placeholder="Ex: Shirdi"
+                    placeholder="Add a final stop like Jodhpur or Osaka"
                     className={`w-full border rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition ${
                       destinationErrors.thirdDestination ? "border-red-400 bg-red-50" : "border-gray-200"
                     }`}
@@ -913,6 +1267,9 @@ export default function CreateTripPage() {
         {/* Budget */}
         <div>
           <label className="font-semibold block mb-3 text-gray-900">Budget</label>
+          <p className="mb-3 text-sm text-gray-500">
+            Your saved budget preference auto-selects here, but you can still choose a different trip budget manually.
+          </p>
           <div className="grid md:grid-cols-3 gap-3">
             <OptionCard title="Cheap" desc="Low cost travel" icon="💵" selected={budgetType === "cheap"} onClick={() => setBudgetType("cheap")} />
             <OptionCard title="Moderate" desc="Balanced experience" icon="💰" selected={budgetType === "moderate"} onClick={() => setBudgetType("moderate")} />
@@ -1047,6 +1404,16 @@ export default function CreateTripPage() {
           </div>
         </div>
       </div>
+
+      {showPreferenceModal && (
+        <PreferenceModal
+          value={draftPreferences}
+          onChange={(value) => setDraftPreferences(normalizePreferences(value))}
+          onClose={() => setShowPreferenceModal(false)}
+          onSave={savePreferences}
+          saving={savingPreferences}
+        />
+      )}
 
       {/* Trip Result */}
       {tripResult && (
