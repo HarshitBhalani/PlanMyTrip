@@ -382,7 +382,7 @@ export default function HomePage() {
                       Sample trip
                     </p>
                     <h3 className="mt-2 text-2xl font-semibold">
-                      Goa, 4 days
+                      Goa, 3 days
                     </h3>
                   </div>
                   <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-white/80">
