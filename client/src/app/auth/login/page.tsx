@@ -54,7 +54,7 @@ export default function LoginPage() {
         password,
       });
 
-      saveAuth(res.token, res.user);
+      saveAuth(res.user);
       const redirectPath = consumePostAuthRedirect() || "/create-trip";
 
       toast.success("Login successful 🎉", {

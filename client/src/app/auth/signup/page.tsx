@@ -33,8 +33,8 @@ export default function SignupPage() {
       return "Password is required";
     }
 
-    if (password.length < 6) {
-      return "Password must be at least 6 characters long";
+    if (password.length < 8) {
+      return "Password must be at least 8 characters long";
     }
 
     return "";
@@ -61,8 +61,8 @@ export default function SignupPage() {
         password,
       });
 
-      // ✅ Save token + user
-      saveAuth(res.token, res.user);
+      // ✅ Server set the httpOnly cookie; cache profile only
+      saveAuth(res.user);
       const redirectPath = consumePostAuthRedirect() || "/create-trip";
 
       toast.success("Account created 🎉", {

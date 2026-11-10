@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { apiRequest } from "../../lib/api";
-import { getToken } from "../../lib/auth";
 
 export default function TripDetail({ params }: any) {
   const [trip, setTrip] = useState<any>(null);
 
   useEffect(() => {
-    apiRequest(`/trip/${params.id}`, "GET", null, getToken()!).then(
+    apiRequest(`/api/trip/${params.id}`, "GET").then(
       (res) => setTrip(res.trip)
     );
   }, []);

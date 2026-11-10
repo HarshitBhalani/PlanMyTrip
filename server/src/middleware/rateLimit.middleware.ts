@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { verifyToken } from "../utils/jwt";
+import { getRequestToken } from "../utils/authCookie";
 
 type LimitConfig = {
   max: number;
@@ -69,14 +70,13 @@ export const attachRateLimitIdentity = async (
     return next();
   }
 
-  const authHeader = req.headers.authorization;
+  const token = getRequestToken(req);
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  if (!token) {
     return next();
   }
 
   try {
-    const token = authHeader.split(" ")[1];
     const decoded = await verifyToken(token);
 
     if (decoded?.userId) {
@@ -121,5 +121,25 @@ export const anonymousIpRateLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => Boolean(req.user?._id),
   keyGenerator: (req) => `ip:${getIpKey(req)}`,
+  handler: rateLimitExceeded,
+});
+
+/* Login / signup brute-force protection (per IP). */
+export const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: readPositiveInteger(`${currentPrefix}_RATE_LIMIT_AUTH_MAX`, isProduction ? 10 : 100),
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `auth:${getIpKey(req)}`,
+  handler: rateLimitExceeded,
+});
+
+/* Distance preview hits Nominatim (1 req/sec policy) – keep it throttled per IP. */
+export const distancePreviewRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: readPositiveInteger(`${currentPrefix}_RATE_LIMIT_DISTANCE_MAX`, isProduction ? 20 : 120),
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `distance:${getIpKey(req)}`,
   handler: rateLimitExceeded,
 });

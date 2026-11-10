@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyToken } from "../utils/jwt";
+import { getRequestToken } from "../utils/authCookie";
 
 export const protect = async (
   req: Request,
@@ -7,16 +8,15 @@ export const protect = async (
   next: NextFunction
 ) => {
   try {
-    const authHeader = req.headers.authorization;
+    const token = getRequestToken(req);
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    if (!token) {
       return res.status(401).json({
         success: false,
         message: "Not authorized",
       });
     }
 
-    const token = authHeader.split(" ")[1];
     const decoded = await verifyToken(token);
 
     if (!decoded || !decoded.userId) {
@@ -32,7 +32,6 @@ export const protect = async (
 
     return next();
   } catch (error) {
-    // 🚨 This should NEVER crash server
     console.error("AUTH MIDDLEWARE ERROR:", error);
     return res.status(401).json({
       success: false,

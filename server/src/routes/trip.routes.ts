@@ -8,6 +8,7 @@ import {
   deleteTrip,
   updateTrip,
   shareTrip,
+  unshareTrip,
   getPublicTripBySlug,
 } from "../controllers/trip.controller";
 import { protect } from "../middleware/auth.middleware";
@@ -16,28 +17,32 @@ import {
   attachRateLimitIdentity,
   authenticatedUserRateLimiter,
   burstRateLimiter,
+  distancePreviewRateLimiter,
 } from "../middleware/rateLimit.middleware";
 import { validateGenerateTripRequest } from "../middleware/tripValidation.middleware";
+import { validateObjectIdParam } from "../middleware/objectId.middleware";
 
 const router = Router();
+const validId = validateObjectIdParam("id");
 
-router.post("/distance-preview", previewTripDistance);
+router.post("/distance-preview", distancePreviewRateLimiter, previewTripDistance);
 router.post(
   "/generate",
   attachRateLimitIdentity,
-  validateGenerateTripRequest,
   burstRateLimiter,
   authenticatedUserRateLimiter,
   anonymousIpRateLimiter,
   protect,
+  validateGenerateTripRequest,
   generateTrip
 );
 router.post("/save", protect, saveTrip);
 router.get("/my-trips", protect, getMyTrips);
 router.get("/public/:slug", getPublicTripBySlug);
-router.post("/:id/share", protect, shareTrip);
-router.get("/:id", protect, getTripById);
-router.put("/:id", protect, updateTrip);
-router.delete("/:id", protect, deleteTrip);
+router.post("/:id/share", protect, validId, shareTrip);
+router.delete("/:id/share", protect, validId, unshareTrip);
+router.get("/:id", protect, validId, getTripById);
+router.put("/:id", protect, validId, updateTrip);
+router.delete("/:id", protect, validId, deleteTrip);
 
 export default router;

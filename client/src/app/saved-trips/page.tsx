@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, Share2 } from "lucide-react";
+import { Download, Link2Off, Share2 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { apiRequest } from "../lib/api";
-import { getUser } from "../lib/auth";
+import { getUser, isLoggedIn } from "../lib/auth";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
@@ -51,10 +51,6 @@ export default function SavedTripsPage() {
   const [downloadingTripId, setDownloadingTripId] = useState<string | null>(null);
   const [sharingTripId, setSharingTripId] = useState<string | null>(null);
 
-  const token =
-    typeof window !== "undefined"
-      ? localStorage.getItem("token")
-      : null;
 
   const userName = getUser()?.fullName?.trim() || "user";
 
@@ -68,8 +64,7 @@ export default function SavedTripsPage() {
       const res = await apiRequest(
         "/api/trip/my-trips",
         "GET",
-        null,
-        token || undefined
+        null
       );
 
       if (res.success) setTrips(res.trips);
@@ -89,8 +84,7 @@ export default function SavedTripsPage() {
       await apiRequest(
         `/api/trip/${id}`,
         "DELETE",
-        null,
-        token || undefined
+        null
       );
 
       toast.success("Trip deleted");
@@ -114,8 +108,7 @@ export default function SavedTripsPage() {
       const res = await apiRequest(
         `/api/trip/${selectedTrip._id}`,
         "PUT",
-        { tripData: selectedTrip.tripData },
-        token || undefined
+        { tripData: selectedTrip.tripData }
       );
 
       if (res.success) {
@@ -258,8 +251,7 @@ export default function SavedTripsPage() {
         const response = await apiRequest(
           `/api/trip/${trip._id}/share`,
           "POST",
-          {},
-          token || undefined
+          {}
         );
 
         if (!response.success || !response.shareSlug) {
@@ -290,6 +282,35 @@ export default function SavedTripsPage() {
       });
     } catch (error: any) {
       toast.error("Failed to create share link", {
+        description: error?.message || "Please try again",
+      });
+    } finally {
+      setSharingTripId(null);
+    }
+  };
+
+  const unshareTrip = async (trip: any) => {
+    try {
+      setSharingTripId(trip._id);
+
+      const response = await apiRequest(`/api/trip/${trip._id}/share`, "DELETE");
+      if (!response.success) {
+        throw new Error(response.message || "Failed to revoke share link");
+      }
+
+      const clearShare = (current: any) =>
+        current && current._id === trip._id
+          ? { ...current, shareSlug: undefined, isPublicShared: false }
+          : current;
+
+      setTrips((currentTrips) => currentTrips.map(clearShare));
+      setSelectedTrip((current: any) => clearShare(current));
+
+      toast.success("Share link revoked", {
+        description: "The old public link no longer works.",
+      });
+    } catch (error: any) {
+      toast.error("Failed to revoke share link", {
         description: error?.message || "Please try again",
       });
     } finally {
@@ -637,6 +658,24 @@ export default function SavedTripsPage() {
                 >
                   <Share2 className="h-4 w-4" />
                 </button>
+                {trip.isPublicShared && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      unshareTrip(trip);
+                    }}
+                    disabled={sharingTripId === trip._id}
+                    className={`px-4 py-2 rounded-md border text-sm font-medium transition ${
+                      sharingTripId === trip._id
+                        ? "border-gray-300 text-gray-400 cursor-not-allowed"
+                        : "border-red-300 text-red-600 hover:bg-red-50"
+                    }`}
+                    aria-label="Stop sharing trip"
+                    title="Stop sharing (revoke public link)"
+                  >
+                    <Link2Off className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             </div>
           ))}

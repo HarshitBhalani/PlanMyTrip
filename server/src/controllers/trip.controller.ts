@@ -64,7 +64,7 @@ const normalizeBudgetPreference = (value?: string): TripPreferences["budgetRange
   return DEFAULT_TRIP_PREFERENCES.budgetRange;
 };
 
-const normalizePreferencePayload = (value: any): TripPreferences => ({
+export const normalizePreferencePayload = (value: any): TripPreferences => ({
   budgetRange: normalizeBudgetPreference(value?.budgetRange),
   hotelType:
     value?.hotelType === "budget" || value?.hotelType === "premium" || value?.hotelType === "luxury"
@@ -109,6 +109,68 @@ const sanitizeTripData = (tripData: any) => {
     hotels,
   };
 };
+
+const MAX_TRIP_DATA_CHARS = 200_000;
+const MAX_TRIP_DATA_DEPTH = 8;
+const ALLOWED_TRAVELER_TYPES = new Set(["solo", "couple", "family", "friends"]);
+const ALLOWED_BUDGET_TYPES = new Set(["cheap", "moderate", "luxury"]);
+
+const getObjectDepth = (value: unknown, depth = 0): number => {
+  if (depth > MAX_TRIP_DATA_DEPTH || !value || typeof value !== "object") {
+    return depth;
+  }
+
+  let maxDepth = depth;
+  for (const child of Object.values(value as Record<string, unknown>)) {
+    maxDepth = Math.max(maxDepth, getObjectDepth(child, depth + 1));
+    if (maxDepth > MAX_TRIP_DATA_DEPTH) {
+      break;
+    }
+  }
+
+  return maxDepth;
+};
+
+const hasUnsafeKey = (value: unknown): boolean => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  return Object.entries(value as Record<string, unknown>).some(
+    ([key, child]) =>
+      key.startsWith("$") ||
+      key.includes(".") ||
+      key === "__proto__" ||
+      key === "constructor" ||
+      key === "prototype" ||
+      hasUnsafeKey(child)
+  );
+};
+
+/* Returns an error message when tripData is not an acceptable plain object, else null. */
+const validateTripDataPayload = (tripData: unknown): string | null => {
+  if (!tripData || typeof tripData !== "object" || Array.isArray(tripData)) {
+    return "Invalid trip data";
+  }
+
+  if (getObjectDepth(tripData) > MAX_TRIP_DATA_DEPTH) {
+    return "Trip data is nested too deeply";
+  }
+
+  if (JSON.stringify(tripData).length > MAX_TRIP_DATA_CHARS) {
+    return "Trip data is too large";
+  }
+
+  // Block Mongo operator / prototype-pollution style keys anywhere in the payload.
+  if (hasUnsafeKey(tripData)) {
+    return "Trip data contains invalid keys";
+  }
+
+  return null;
+};
+
+const optionalDestination = (value: unknown) =>
+  typeof value === "string" && value.trim() ? value.trim().slice(0, 120) : undefined;
 
 const sanitizeSlugPart = (value: string) =>
   normalizeDestination(value)
@@ -1881,15 +1943,41 @@ export const saveTrip = async (req: any, res: Response) => {
       travelers,
       adults,
       children,
-      travelerDetails,
       tripData,
     } =
-      req.body;
+      req.body || {};
 
     if (!destination || !days || !budgetType || !travelers || !tripData) {
       return res.status(400).json({
         success: false,
         message: "Missing required fields",
+      });
+    }
+
+    const cleanDestination = optionalDestination(destination);
+    const parsedDays = Number(days);
+
+    if (
+      !cleanDestination ||
+      !Number.isInteger(parsedDays) ||
+      parsedDays < 1 ||
+      parsedDays > 15 ||
+      typeof budgetType !== "string" ||
+      !ALLOWED_BUDGET_TYPES.has(budgetType) ||
+      typeof travelers !== "string" ||
+      !ALLOWED_TRAVELER_TYPES.has(travelers)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid trip fields",
+      });
+    }
+
+    const tripDataError = validateTripDataPayload(tripData);
+    if (tripDataError) {
+      return res.status(400).json({
+        success: false,
+        message: tripDataError,
       });
     }
 
@@ -1906,19 +1994,21 @@ export const saveTrip = async (req: any, res: Response) => {
       });
     }
 
+    // Recompute traveler details server-side instead of trusting the client object.
+    const computedTravelerDetails = getTravelerDetails(travelers, Number(adults), Number(children));
     const sanitizedTripData = sanitizeTripData(tripData);
 
     const trip = await Trip.create({
       user: req.user._id,
-      destination,
-      secondDestination,
-      thirdDestination,
-      days,
+      destination: cleanDestination,
+      secondDestination: optionalDestination(secondDestination),
+      thirdDestination: optionalDestination(thirdDestination),
+      days: parsedDays,
       budgetType,
       travelers,
-      adults,
-      children,
-      travelerDetails,
+      adults: computedTravelerDetails.adults,
+      children: computedTravelerDetails.children,
+      travelerDetails: computedTravelerDetails,
       tripData: sanitizedTripData,
     });
 
@@ -2038,12 +2128,51 @@ export const shareTrip = async (req: any, res: Response) => {
 };
 
 /* =========================================================
+   UNSHARE TRIP (revoke public link)
+========================================================= */
+export const unshareTrip = async (req: any, res: Response) => {
+  try {
+    const trip = await Trip.findOneAndUpdate(
+      { _id: req.params.id, user: req.user._id },
+      { $set: { isPublicShared: false }, $unset: { shareSlug: 1, sharedAt: 1 } },
+      { new: true }
+    );
+
+    if (!trip) {
+      return res.status(404).json({
+        success: false,
+        message: "Trip not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Share link revoked",
+    });
+  } catch (error) {
+    console.error("UNSHARE TRIP ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to revoke share link",
+    });
+  }
+};
+
+/* =========================================================
    GET PUBLIC TRIP
 ========================================================= */
 export const getPublicTripBySlug = async (req: Request, res: Response) => {
   try {
+    const slug = req.params.slug;
+    if (typeof slug !== "string" || !/^[a-z0-9-]{1,200}$/.test(slug)) {
+      return res.status(404).json({
+        success: false,
+        message: "Shared trip not found",
+      });
+    }
+
     const trip = await Trip.findOne({
-      shareSlug: req.params.slug,
+      shareSlug: slug,
       isPublicShared: true,
     });
 
@@ -2086,12 +2215,13 @@ export const getPublicTripBySlug = async (req: Request, res: Response) => {
 ========================================================= */
 export const updateTrip = async (req: any, res: Response) => {
   try {
-    const { tripData } = req.body;
+    const { tripData } = req.body || {};
 
-    if (!tripData || typeof tripData !== "object" || Array.isArray(tripData)) {
+    const tripDataError = validateTripDataPayload(tripData);
+    if (tripDataError) {
       return res.status(400).json({
         success: false,
-        message: "Invalid trip data",
+        message: tripDataError,
       });
     }
 

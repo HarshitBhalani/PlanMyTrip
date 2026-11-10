@@ -2,19 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
+import { isLoggedIn } from "../lib/auth";
 
 export default function MyTripsPage() {
   const [trips, setTrips] = useState([]);
 
   useEffect(() => {
     const loadTrips = async () => {
-      const token = localStorage.getItem("token");
+      const token = isLoggedIn();
       const data = await apiRequest(
-        "/api/trip",
-        "GET",
-        undefined,
-        token || undefined
-      );
+        "/api/trip/my-trips",
+        "GET");
       setTrips(data.trips || []);
     };
     loadTrips();

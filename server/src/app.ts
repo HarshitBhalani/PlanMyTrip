@@ -9,19 +9,41 @@ import userRoutes from "./routes/user.routes";
 dotenv.config();
 
 const app = express();
-app.set("trust proxy", 1);
+// Number of proxy hops in front of the app (Render = 1; + Next.js/Vercel rewrite proxy = 2).
+app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS) || 1);
+app.disable("x-powered-by");
+
+const allowedOrigins = Array.from(
+  new Set(
+    [
+      "http://localhost:3000",
+      "https://plan-my-trip-iota.vercel.app", // ⬅️VERCEL DOMAIN
+      ...(process.env.CLIENT_URL || "").split(","),
+    ]
+      .map((origin) => origin.trim().replace(/\/+$/, ""))
+      .filter(Boolean)
+  )
+);
+
+/* ✅ BASIC SECURITY HEADERS */
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
+  }
+  next();
+});
 
 /* ✅ BODY PARSERS (MUST BE FIRST) */
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "300kb" }));
+app.use(express.urlencoded({ extended: false, limit: "50kb" }));
 
 /* ✅ CORS */
 app.use(
   cors({
-    origin: [
-      "http://localhost:3000",
-      "https://plan-my-trip-iota.vercel.app", // ⬅️VERCEL DOMAIN
-    ],
+    origin: allowedOrigins,
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -58,5 +80,25 @@ app.use((req, res) => {
   });
 });
 
+/* ✅ GLOBAL ERROR HANDLER (bad JSON, payload too large, unexpected errors) */
+app.use(
+  (
+    err: any,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction
+  ) => {
+    if (err?.type === "entity.parse.failed") {
+      return res.status(400).json({ success: false, message: "Invalid JSON body" });
+    }
+
+    if (err?.type === "entity.too.large") {
+      return res.status(413).json({ success: false, message: "Request payload is too large" });
+    }
+
+    console.error("UNHANDLED ERROR:", err);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+);
 
 export default app;

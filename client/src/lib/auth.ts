@@ -1,4 +1,6 @@
 // client/src/lib/auth.ts
+// Auth state: the JWT lives in an httpOnly cookie set by the server and is never
+// readable from JS. localStorage only caches the non-secret profile for the UI.
 
 export type AuthUser = {
   id: string;
@@ -6,31 +8,38 @@ export type AuthUser = {
   email: string;
 };
 
-/* =====================
-   SAVE AUTH DATA
-===================== */
-export const saveAuth = (token: string, user: AuthUser) => {
+const clearLegacyToken = () => {
+  // Remove tokens stored by older versions of the app.
+  localStorage.removeItem("token");
+};
+
+/* ============================
+   SAVE AUTH (LOGIN / SIGNUP)
+============================ */
+export const saveAuth = (user: AuthUser) => {
   if (typeof window === "undefined") return;
 
-  localStorage.setItem("token", token);
+  clearLegacyToken();
   localStorage.setItem("user", JSON.stringify(user));
 
+  // notify UI (Navbar etc.)
   window.dispatchEvent(new Event("auth-change"));
 };
 
-/* =====================
-   GET LOGGED IN USER
-===================== */
+/* ============================
+   GET CURRENT USER
+============================ */
 export const getUser = (): AuthUser | null => {
   if (typeof window === "undefined") return null;
 
-  const rawUser = localStorage.getItem("user");
-  if (!rawUser) {
+  clearLegacyToken();
+  const raw = localStorage.getItem("user");
+  if (!raw) {
     return null;
   }
 
   try {
-    const parsedUser = JSON.parse(rawUser);
+    const parsedUser = JSON.parse(raw);
 
     if (
       !parsedUser ||
@@ -48,21 +57,24 @@ export const getUser = (): AuthUser | null => {
   }
 };
 
-/* =====================
-   GET TOKEN
-===================== */
-export const getToken = (): string | null => {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("token");
-};
+/* ============================
+   IS LOGGED IN (UI hint only; the server cookie is the real check)
+============================ */
+export const isLoggedIn = (): boolean => getUser() !== null;
 
-/* =====================
+/* ============================
    LOGOUT
-===================== */
-export const logout = () => {
+============================ */
+export const logout = async () => {
   if (typeof window === "undefined") return;
 
-  localStorage.removeItem("token");
+  try {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+  } catch {
+    // ignore network errors; local state is cleared anyway
+  }
+
+  clearLegacyToken();
   localStorage.removeItem("user");
 
   window.dispatchEvent(new Event("auth-change"));

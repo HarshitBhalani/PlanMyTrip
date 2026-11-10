@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiRequest } from "../lib/api";
+import { isLoggedIn } from "../lib/auth";
 
 type TripPreferences = {
   budgetRange: "cheap" | "moderate" | "luxury";
@@ -77,7 +78,7 @@ export default function PreferencesPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = isLoggedIn();
 
     if (!token) {
       setLoading(false);
@@ -88,7 +89,7 @@ export default function PreferencesPage() {
 
     const loadPreferences = async () => {
       try {
-        const response = await apiRequest("/api/user/preferences", "GET", undefined, token);
+        const response = await apiRequest("/api/user/preferences", "GET");
         if (isActive) {
           setPrefs(normalizePreferences(response?.preferences));
         }
@@ -107,7 +108,7 @@ export default function PreferencesPage() {
   }, []);
 
   const savePrefs = async () => {
-    const token = localStorage.getItem("token");
+    const token = isLoggedIn();
 
     if (!token) {
       alert("Please login first");
@@ -116,7 +117,7 @@ export default function PreferencesPage() {
 
     setSaving(true);
     try {
-      await apiRequest("/api/user/preferences", "PUT", prefs, token);
+      await apiRequest("/api/user/preferences", "PUT", prefs);
       alert("Preferences saved");
     } finally {
       setSaving(false);

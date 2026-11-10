@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, Loader2, Map, PlusCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest } from "../lib/api";
+import { isLoggedIn } from "../lib/auth";
 import {
   clearPendingTripDraft,
   getPendingTripDraft,
@@ -536,7 +537,7 @@ export default function CreateTripPage() {
   };
 
   const savePreferences = async () => {
-    const token = localStorage.getItem("token");
+    const token = isLoggedIn();
     const normalized = normalizePreferences(draftPreferences);
 
     applyPreferences(normalized);
@@ -549,7 +550,7 @@ export default function CreateTripPage() {
 
     setSavingPreferences(true);
     try {
-      await apiRequest("/api/user/preferences", "PUT", normalized, token);
+      await apiRequest("/api/user/preferences", "PUT", normalized);
       setShowPreferenceModal(false);
       toast.success("Preferences saved");
     } catch (error: any) {
@@ -611,7 +612,7 @@ export default function CreateTripPage() {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = isLoggedIn();
 
     if (!token) {
       applyPreferences(DEFAULT_TRIP_PREFERENCES, false);
@@ -622,7 +623,7 @@ export default function CreateTripPage() {
 
     const loadPreferences = async () => {
       try {
-        const response = await apiRequest("/api/user/preferences", "GET", undefined, token);
+        const response = await apiRequest("/api/user/preferences", "GET");
         if (!isActive) {
           return;
         }
@@ -804,7 +805,7 @@ export default function CreateTripPage() {
       return;
     }
 
-    const token = localStorage.getItem("token");
+    const token = isLoggedIn();
     if (!token) {
       savePendingTripDraft({
         destination,
@@ -888,8 +889,7 @@ export default function CreateTripPage() {
           travelers,
           adults: requiresMemberBreakdown ? adults : undefined,
           children: requiresMemberBreakdown ? children : undefined,
-        },
-        token
+        }
       );
       if (!response.success) throw new Error(response.message || "Trip generation failed");
       setTripResult(response.trip);
@@ -920,7 +920,7 @@ export default function CreateTripPage() {
   };
 
   const saveTrip = async () => {
-    const token = localStorage.getItem("token");
+    const token = isLoggedIn();
     if (!token) { toast.error("Authentication required"); return; }
     if (!tripResult) { toast.error("No trip to save"); return; }
     if (!generatedTripContext) {
@@ -949,8 +949,7 @@ export default function CreateTripPage() {
           travelerDetails: generatedTripContext.travelerDetails,
           adults: generatedTripContext.adults,
           children: generatedTripContext.children,
-        },
-        token
+        }
       );
       if (!response.success) throw new Error(response.message || "Failed to save trip");
       setIsSaved(true);
