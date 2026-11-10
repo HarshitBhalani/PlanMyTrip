@@ -38,7 +38,13 @@ export async function apiRequest(
   }
 
   if (!res.ok) {
-    throw new Error(data?.message || "Request failed");
+    const message =
+      res.status === 401 && !endpoint.startsWith("/api/auth/")
+        ? "Please log in to continue"
+        : data?.message || "Request failed";
+    const error = new Error(message) as Error & { status?: number };
+    error.status = res.status;
+    throw error;
   }
 
   return data;

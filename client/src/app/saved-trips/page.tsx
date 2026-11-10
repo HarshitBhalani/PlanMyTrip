@@ -58,7 +58,18 @@ export default function SavedTripsPage() {
     fetchTrips();
   }, []);
 
+  const redirectToLogin = () => {
+    toast.info("Please log in to view your saved trips");
+    router.push("/auth/login");
+  };
+
   const fetchTrips = async () => {
+    if (!isLoggedIn()) {
+      setLoading(false);
+      redirectToLogin();
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await apiRequest(
@@ -69,7 +80,13 @@ export default function SavedTripsPage() {
 
       if (res.success) setTrips(res.trips);
     } catch (err: any) {
-      toast.error("Failed to fetch trips");
+      if (err?.status === 401) {
+        redirectToLogin();
+        return;
+      }
+      toast.error("Failed to fetch trips", {
+        description: err?.message || "Please try again",
+      });
     } finally {
       setLoading(false);
     }
